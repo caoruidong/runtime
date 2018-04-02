@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -406,7 +407,39 @@ func (spec *CompatOCISpec) ContainerType() (vc.ContainerType, error) {
 		return vc.UnknownContainerType, fmt.Errorf("Unknown container type %s", containerTypeVal)
 	}
 
+	for _, ns := range spec.Linux.Namespaces {
+		if ns.Path != "" {
+			if ns.Type == "mount" {
+				return vc.UnknownContainerType, fmt.Errorf("doesn't support containers with shared mount namespace")
+			}
+			return vc.PodContainer, nil
+		}
+	}
+
 	return vc.PodSandbox, nil
+}
+
+func getPodIdByPid(pid int) (string, error) {
+	// concrete virtcontainer implementation
+	var virtcontainersImpl = &vc.VCImpl{}
+
+	// vci is used to access a particular virtcontainers implementation.
+	// Normally, it refers to the official package, but is re-assigned in
+	// the tests to allow virtcontainers to be mocked.
+	var vci vc.VC = virtcontainersImpl
+
+	podList, err := vci.ListPod()
+	if err != nil {
+		return "", err
+	}
+	for _, pod := range podList {
+		for _, container := range pod.ContainersStatus {
+			if container.PID == pid {
+				return pod.ID, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("Could not find pod ID")
 }
 
 // PodID determines the pod ID related to an OCI configuration. This function
@@ -419,7 +452,23 @@ func (spec *CompatOCISpec) PodID() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("Could not find pod ID")
+	var nsPath string
+	for _, ns := range spec.Linux.Namespaces {
+		if ns.Path != "" {
+			nsPath = ns.Path
+		}
+	}
+	pidExp := regexp.MustCompile(`/proc/(\d+)/ns/*`)
+	matches := pidExp.FindStringSubmatch(nsPath)
+	if len(matches) != 2 {
+		return "", fmt.Errorf("malformed ns path: %s", nsPath)
+	}
+	pidStr := matches[1]
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return "", err
+	}
+	return getPodIdByPid(pid)
 }
 
 func vmConfig(ocispec CompatOCISpec, config RuntimeConfig) (vc.Resources, error) {
