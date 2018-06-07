@@ -1,15 +1,22 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package virtcontainers
 
 import (
-	"io"
 	"syscall"
 
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,58 +24,35 @@ import (
 type VC interface {
 	SetLogger(logger logrus.FieldLogger)
 
-	CreateSandbox(sandboxConfig SandboxConfig) (VCSandbox, error)
-	DeleteSandbox(sandboxID string) (VCSandbox, error)
-	FetchSandbox(sandboxID string) (VCSandbox, error)
-	ListSandbox() ([]SandboxStatus, error)
-	PauseSandbox(sandboxID string) (VCSandbox, error)
-	ResumeSandbox(sandboxID string) (VCSandbox, error)
-	RunSandbox(sandboxConfig SandboxConfig) (VCSandbox, error)
-	StartSandbox(sandboxID string) (VCSandbox, error)
-	StatusSandbox(sandboxID string) (SandboxStatus, error)
-	StopSandbox(sandboxID string) (VCSandbox, error)
+	CreatePod(podConfig PodConfig) (VCPod, error)
+	DeletePod(podID string) (VCPod, error)
+	ListPod() ([]PodStatus, error)
+	PausePod(podID string) (VCPod, error)
+	ResumePod(podID string) (VCPod, error)
+	RunPod(podConfig PodConfig) (VCPod, error)
+	StartPod(podID string) (VCPod, error)
+	StatusPod(podID string) (PodStatus, error)
+	StopPod(podID string) (VCPod, error)
 
-	CreateContainer(sandboxID string, containerConfig ContainerConfig) (VCSandbox, VCContainer, error)
-	DeleteContainer(sandboxID, containerID string) (VCContainer, error)
-	EnterContainer(sandboxID, containerID string, cmd Cmd) (VCSandbox, VCContainer, *Process, error)
-	KillContainer(sandboxID, containerID string, signal syscall.Signal, all bool) error
-	StartContainer(sandboxID, containerID string) (VCContainer, error)
-	StatusContainer(sandboxID, containerID string) (ContainerStatus, error)
-	StatsContainer(sandboxID, containerID string) (ContainerStats, error)
-	StopContainer(sandboxID, containerID string) (VCContainer, error)
-	ProcessListContainer(sandboxID, containerID string, options ProcessListOptions) (ProcessList, error)
-	UpdateContainer(sandboxID, containerID string, resources specs.LinuxResources) error
-	PauseContainer(sandboxID, containerID string) error
-	ResumeContainer(sandboxID, containerID string) error
+	CreateContainer(podID string, containerConfig ContainerConfig) (VCPod, VCContainer, error)
+	DeleteContainer(podID, containerID string) (VCContainer, error)
+	EnterContainer(podID, containerID string, cmd Cmd) (VCPod, VCContainer, *Process, error)
+	KillContainer(podID, containerID string, signal syscall.Signal, all bool) error
+	StartContainer(podID, containerID string) (VCContainer, error)
+	StatusContainer(podID, containerID string) (ContainerStatus, error)
+	StopContainer(podID, containerID string) (VCContainer, error)
+	ProcessListContainer(podID, containerID string, options ProcessListOptions) (ProcessList, error)
 }
 
-// VCSandbox is the Sandbox interface
-// (required since virtcontainers.Sandbox only contains private fields)
-type VCSandbox interface {
+// VCPod is the Pod interface
+// (required since virtcontainers.Pod only contains private fields)
+type VCPod interface {
 	Annotations(key string) (string, error)
 	GetAllContainers() []VCContainer
 	GetAnnotations() map[string]string
 	GetContainer(containerID string) VCContainer
 	ID() string
 	SetAnnotations(annotations map[string]string) error
-
-	Pause() error
-	Resume() error
-	Release() error
-	Monitor() (chan error, error)
-	Delete() error
-	Status() SandboxStatus
-	CreateContainer(contConfig ContainerConfig) (VCContainer, error)
-	DeleteContainer(contID string) (VCContainer, error)
-	StartContainer(containerID string) (VCContainer, error)
-	StatusContainer(containerID string) (ContainerStatus, error)
-	StatsContainer(containerID string) (ContainerStats, error)
-	EnterContainer(containerID string, cmd Cmd) (VCContainer, *Process, error)
-	UpdateContainer(containerID string, resources specs.LinuxResources) error
-	WaitProcess(containerID, processID string) (int32, error)
-	SignalProcess(containerID, processID string, signal syscall.Signal, all bool) error
-	WinsizeProcess(containerID, processID string, height, width uint32) error
-	IOStream(containerID, processID string) (io.WriteCloser, io.Reader, io.Reader, error)
 }
 
 // VCContainer is the Container interface
@@ -78,7 +62,7 @@ type VCContainer interface {
 	GetPid() int
 	GetToken() string
 	ID() string
-	Sandbox() VCSandbox
+	Pod() VCPod
 	Process() Process
 	SetPid(pid int) error
 }

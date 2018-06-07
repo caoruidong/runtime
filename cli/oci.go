@@ -1,7 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -9,7 +18,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,11 +33,10 @@ import (
 
 // Contants related to cgroup memory directory
 const (
-	cgroupsTasksFile   = "tasks"
-	cgroupsProcsFile   = "cgroup.procs"
-	cgroupsDirMode     = os.FileMode(0750)
-	cgroupsFileMode    = os.FileMode(0640)
-	ctrsMappingDirMode = os.FileMode(0750)
+	cgroupsTasksFile = "tasks"
+	cgroupsProcsFile = "cgroup.procs"
+	cgroupsDirMode   = os.FileMode(0750)
+	cgroupsFileMode  = os.FileMode(0640)
 
 	// Filesystem type corresponding to CGROUP_SUPER_MAGIC as listed
 	// here: http://man7.org/linux/man-pages/man2/statfs.2.html
@@ -42,36 +49,35 @@ var cgroupsDirPath string
 
 var procMountInfo = "/proc/self/mountinfo"
 
-var ctrsMapTreePath = "/var/run/kata-containers/containers-mapping"
-
-// getContainerInfo returns the container status and its sandbox ID.
+// getContainerInfo returns the container status and its pod ID.
+// It internally expands the container ID from the prefix provided.
 func getContainerInfo(containerID string) (vc.ContainerStatus, string, error) {
 	// container ID MUST be provided.
 	if containerID == "" {
 		return vc.ContainerStatus{}, "", fmt.Errorf("Missing container ID")
 	}
 
-	sandboxID, err := fetchContainerIDMapping(containerID)
-	if err != nil {
-		return vc.ContainerStatus{}, "", err
-	}
-	if sandboxID == "" {
-		// Not finding a container should not trigger an error as
-		// getContainerInfo is used for checking the existence and
-		// the absence of a container ID.
-		return vc.ContainerStatus{}, "", nil
-	}
-
-	ctrStatus, err := vci.StatusContainer(sandboxID, containerID)
+	podStatusList, err := vci.ListPod()
 	if err != nil {
 		return vc.ContainerStatus{}, "", err
 	}
 
-	return ctrStatus, sandboxID, nil
+	for _, podStatus := range podStatusList {
+		for _, containerStatus := range podStatus.ContainersStatus {
+			if containerStatus.ID == containerID {
+				return containerStatus, podStatus.ID, nil
+			}
+		}
+	}
+
+	// Not finding a container should not trigger an error as
+	// getContainerInfo is used for checking the existence and
+	// the absence of a container ID.
+	return vc.ContainerStatus{}, "", nil
 }
 
 func getExistingContainerInfo(containerID string) (vc.ContainerStatus, string, error) {
-	cStatus, sandboxID, err := getContainerInfo(containerID)
+	cStatus, podID, err := getContainerInfo(containerID)
 	if err != nil {
 		return vc.ContainerStatus{}, "", err
 	}
@@ -81,7 +87,7 @@ func getExistingContainerInfo(containerID string) (vc.ContainerStatus, string, e
 		return vc.ContainerStatus{}, "", fmt.Errorf("Container ID (%v) does not exist", containerID)
 	}
 
-	return cStatus, sandboxID, nil
+	return cStatus, podID, nil
 }
 
 func validCreateParams(containerID, bundlePath string) (string, error) {
@@ -125,7 +131,7 @@ func validCreateParams(containerID, bundlePath string) (string, error) {
 // processCgroupsPath process the cgroups path as expected from the
 // OCI runtime specification. It returns a list of complete paths
 // that should be created and used for every specified resource.
-func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, error) {
+func processCgroupsPath(ociSpec oci.CompatOCISpec, isPod bool) ([]string, error) {
 	var cgroupsPathList []string
 
 	if ociSpec.Linux.CgroupsPath == "" {
@@ -137,7 +143,7 @@ func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, er
 	}
 
 	if ociSpec.Linux.Resources.Memory != nil {
-		memCgroupsPath, err := processCgroupsPathForResource(ociSpec, "memory", isSandbox)
+		memCgroupsPath, err := processCgroupsPathForResource(ociSpec, "memory", isPod)
 		if err != nil {
 			return []string{}, err
 		}
@@ -148,7 +154,7 @@ func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, er
 	}
 
 	if ociSpec.Linux.Resources.CPU != nil {
-		cpuCgroupsPath, err := processCgroupsPathForResource(ociSpec, "cpu", isSandbox)
+		cpuCgroupsPath, err := processCgroupsPathForResource(ociSpec, "cpu", isPod)
 		if err != nil {
 			return []string{}, err
 		}
@@ -159,7 +165,7 @@ func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, er
 	}
 
 	if ociSpec.Linux.Resources.Pids != nil {
-		pidsCgroupsPath, err := processCgroupsPathForResource(ociSpec, "pids", isSandbox)
+		pidsCgroupsPath, err := processCgroupsPathForResource(ociSpec, "pids", isPod)
 		if err != nil {
 			return []string{}, err
 		}
@@ -170,7 +176,7 @@ func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, er
 	}
 
 	if ociSpec.Linux.Resources.BlockIO != nil {
-		blkIOCgroupsPath, err := processCgroupsPathForResource(ociSpec, "blkio", isSandbox)
+		blkIOCgroupsPath, err := processCgroupsPathForResource(ociSpec, "blkio", isPod)
 		if err != nil {
 			return []string{}, err
 		}
@@ -183,7 +189,7 @@ func processCgroupsPath(ociSpec oci.CompatOCISpec, isSandbox bool) ([]string, er
 	return cgroupsPathList, nil
 }
 
-func processCgroupsPathForResource(ociSpec oci.CompatOCISpec, resource string, isSandbox bool) (string, error) {
+func processCgroupsPathForResource(ociSpec oci.CompatOCISpec, resource string, isPod bool) (string, error) {
 	if resource == "" {
 		return "", errNeedLinuxResource
 	}
@@ -342,65 +348,4 @@ func getCgroupsDirPath(mountInfoFile string) (string, error) {
 	}
 
 	return cgroupRootPath, nil
-}
-
-// This function assumes it should find only one file inside the container
-// ID directory. If there are several files, we could not determine which
-// file name corresponds to the sandbox ID associated, and this would throw
-// an error.
-func fetchContainerIDMapping(containerID string) (string, error) {
-	if containerID == "" {
-		return "", fmt.Errorf("Missing container ID")
-	}
-
-	dirPath := filepath.Join(ctrsMapTreePath, containerID)
-
-	files, err := ioutil.ReadDir(dirPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-
-		return "", err
-	}
-
-	if len(files) != 1 {
-		return "", fmt.Errorf("Too many files (%d) in %q", len(files), dirPath)
-	}
-
-	return files[0].Name(), nil
-}
-
-func addContainerIDMapping(containerID, sandboxID string) error {
-	if containerID == "" {
-		return fmt.Errorf("Missing container ID")
-	}
-
-	if sandboxID == "" {
-		return fmt.Errorf("Missing sandbox ID")
-	}
-
-	parentPath := filepath.Join(ctrsMapTreePath, containerID)
-
-	if err := os.RemoveAll(parentPath); err != nil {
-		return err
-	}
-
-	path := filepath.Join(parentPath, sandboxID)
-
-	if err := os.MkdirAll(path, ctrsMappingDirMode); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func delContainerIDMapping(containerID string) error {
-	if containerID == "" {
-		return fmt.Errorf("Missing container ID")
-	}
-
-	path := filepath.Join(ctrsMapTreePath, containerID)
-
-	return os.RemoveAll(path)
 }

@@ -1,7 +1,17 @@
 //
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -10,11 +20,11 @@ import (
 	"testing"
 )
 
-func testCreateNoopContainer() (*Sandbox, *Container, error) {
+func testCreateNoopContainer() (*Pod, *Container, error) {
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -26,14 +36,14 @@ func testCreateNoopContainer() (*Sandbox, *Container, error) {
 		return nil, nil, err
 	}
 
-	return p.(*Sandbox), c.(*Container), nil
+	return p.(*Pod), c.(*Container), nil
 }
 
 func TestNoopAgentInit(t *testing.T) {
 	n := &noopAgent{}
-	sandbox := &Sandbox{}
+	pod := &Pod{}
 
-	err := n.init(sandbox, nil)
+	err := n.init(pod, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,32 +52,31 @@ func TestNoopAgentInit(t *testing.T) {
 func TestNoopAgentExec(t *testing.T) {
 	n := &noopAgent{}
 	cmd := Cmd{}
-	sandbox, container, err := testCreateNoopContainer()
+	pod, container, err := testCreateNoopContainer()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanUp()
 
-	if _, err = n.exec(sandbox, *container, cmd); err != nil {
+	if _, err = n.exec(pod, *container, cmd); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestNoopAgentStartSandbox(t *testing.T) {
+func TestNoopAgentStartPod(t *testing.T) {
 	n := &noopAgent{}
-	sandbox := &Sandbox{}
+	pod := Pod{}
 
-	err := n.startSandbox(sandbox)
+	err := n.startPod(pod)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestNoopAgentStopSandbox(t *testing.T) {
+func TestNoopAgentStopPod(t *testing.T) {
 	n := &noopAgent{}
-	sandbox := &Sandbox{}
+	pod := Pod{}
 
-	err := n.stopSandbox(sandbox)
+	err := n.stopPod(pod)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,30 +84,28 @@ func TestNoopAgentStopSandbox(t *testing.T) {
 
 func TestNoopAgentCreateContainer(t *testing.T) {
 	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
+	pod, container, err := testCreateNoopContainer()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanUp()
 
-	if err := n.startSandbox(sandbox); err != nil {
+	if err := n.startPod(*pod); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := n.createContainer(sandbox, container); err != nil {
+	if _, err := n.createContainer(pod, container); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestNoopAgentStartContainer(t *testing.T) {
 	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
+	pod, container, err := testCreateNoopContainer()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanUp()
 
-	err = n.startContainer(sandbox, container)
+	err = n.startContainer(*pod, container)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,52 +113,12 @@ func TestNoopAgentStartContainer(t *testing.T) {
 
 func TestNoopAgentStopContainer(t *testing.T) {
 	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
+	pod, container, err := testCreateNoopContainer()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanUp()
 
-	err = n.stopContainer(sandbox, *container)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestNoopAgentStatsContainer(t *testing.T) {
-	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanUp()
-	_, err = n.statsContainer(sandbox, *container)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestNoopAgentPauseContainer(t *testing.T) {
-	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanUp()
-	err = n.pauseContainer(sandbox, *container)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestNoopAgentResumeContainer(t *testing.T) {
-	n := &noopAgent{}
-	sandbox, container, err := testCreateNoopContainer()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanUp()
-	err = n.resumeContainer(sandbox, *container)
+	err = n.stopContainer(*pod, *container)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package vcmock
 
@@ -16,7 +25,7 @@ import (
 )
 
 const (
-	testSandboxID   = "testSandboxID"
+	testPodID       = "testPodID"
 	testContainerID = "testContainerID"
 )
 
@@ -44,14 +53,14 @@ func TestVCImplementations(t *testing.T) {
 	assert.True(t, testImplementsIF)
 }
 
-func TestVCSandboxImplementations(t *testing.T) {
+func TestVCPodImplementations(t *testing.T) {
 	// official implementation
-	mainImpl := &vc.Sandbox{}
+	mainImpl := &vc.Pod{}
 
 	// test implementation
-	testImpl := &Sandbox{}
+	testImpl := &Pod{}
 
-	var interfaceType vc.VCSandbox
+	var interfaceType vc.VCPod
 
 	// check that the official implementation implements the
 	// interface
@@ -108,236 +117,236 @@ func TestVCMockSetLogger(t *testing.T) {
 	assert.Equal(loggerTriggered, 1)
 }
 
-func TestVCMockCreateSandbox(t *testing.T) {
+func TestVCMockCreatePod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.CreateSandboxFunc)
+	assert.Nil(m.CreatePodFunc)
 
-	_, err := m.CreateSandbox(vc.SandboxConfig{})
+	_, err := m.CreatePod(vc.PodConfig{})
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.CreateSandbox(vc.SandboxConfig{})
+	pod, err := m.CreatePod(vc.PodConfig{})
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.CreateSandboxFunc = nil
+	m.CreatePodFunc = nil
 
-	_, err = m.CreateSandbox(vc.SandboxConfig{})
+	_, err = m.CreatePod(vc.PodConfig{})
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockDeleteSandbox(t *testing.T) {
+func TestVCMockDeletePod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.DeleteSandboxFunc)
+	assert.Nil(m.DeletePodFunc)
 
-	_, err := m.DeleteSandbox(testSandboxID)
+	_, err := m.DeletePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.DeleteSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.DeletePodFunc = func(podID string) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.DeleteSandbox(testSandboxID)
+	pod, err := m.DeletePod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.DeleteSandboxFunc = nil
+	m.DeletePodFunc = nil
 
-	_, err = m.DeleteSandbox(testSandboxID)
+	_, err = m.DeletePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockListSandbox(t *testing.T) {
+func TestVCMockListPod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.ListSandboxFunc)
+	assert.Nil(m.ListPodFunc)
 
-	_, err := m.ListSandbox()
+	_, err := m.ListPod()
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.ListSandboxFunc = func() ([]vc.SandboxStatus, error) {
-		return []vc.SandboxStatus{}, nil
+	m.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{}, nil
 	}
 
-	sandboxes, err := m.ListSandbox()
+	pods, err := m.ListPod()
 	assert.NoError(err)
-	assert.Equal(sandboxes, []vc.SandboxStatus{})
+	assert.Equal(pods, []vc.PodStatus{})
 
 	// reset
-	m.ListSandboxFunc = nil
+	m.ListPodFunc = nil
 
-	_, err = m.ListSandbox()
+	_, err = m.ListPod()
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockPauseSandbox(t *testing.T) {
+func TestVCMockPausePod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.PauseSandboxFunc)
+	assert.Nil(m.PausePodFunc)
 
-	_, err := m.PauseSandbox(testSandboxID)
+	_, err := m.PausePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.PauseSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.PausePodFunc = func(podID string) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.PauseSandbox(testSandboxID)
+	pod, err := m.PausePod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.PauseSandboxFunc = nil
+	m.PausePodFunc = nil
 
-	_, err = m.PauseSandbox(testSandboxID)
+	_, err = m.PausePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockResumeSandbox(t *testing.T) {
+func TestVCMockResumePod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.ResumeSandboxFunc)
+	assert.Nil(m.ResumePodFunc)
 
-	_, err := m.ResumeSandbox(testSandboxID)
+	_, err := m.ResumePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.ResumeSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.ResumePodFunc = func(podID string) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.ResumeSandbox(testSandboxID)
+	pod, err := m.ResumePod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.ResumeSandboxFunc = nil
+	m.ResumePodFunc = nil
 
-	_, err = m.ResumeSandbox(testSandboxID)
+	_, err = m.ResumePod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockRunSandbox(t *testing.T) {
+func TestVCMockRunPod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.RunSandboxFunc)
+	assert.Nil(m.RunPodFunc)
 
-	_, err := m.RunSandbox(vc.SandboxConfig{})
+	_, err := m.RunPod(vc.PodConfig{})
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.RunSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.RunPodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.RunSandbox(vc.SandboxConfig{})
+	pod, err := m.RunPod(vc.PodConfig{})
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.RunSandboxFunc = nil
+	m.RunPodFunc = nil
 
-	_, err = m.RunSandbox(vc.SandboxConfig{})
+	_, err = m.RunPod(vc.PodConfig{})
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockStartSandbox(t *testing.T) {
+func TestVCMockStartPod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.StartSandboxFunc)
+	assert.Nil(m.StartPodFunc)
 
-	_, err := m.StartSandbox(testSandboxID)
+	_, err := m.StartPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.StartPodFunc = func(podID string) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.StartSandbox(testSandboxID)
+	pod, err := m.StartPod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.StartSandboxFunc = nil
+	m.StartPodFunc = nil
 
-	_, err = m.StartSandbox(testSandboxID)
+	_, err = m.StartPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockStatusSandbox(t *testing.T) {
+func TestVCMockStatusPod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.StatusSandboxFunc)
+	assert.Nil(m.StatusPodFunc)
 
-	_, err := m.StatusSandbox(testSandboxID)
+	_, err := m.StatusPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StatusSandboxFunc = func(sandboxID string) (vc.SandboxStatus, error) {
-		return vc.SandboxStatus{}, nil
+	m.StatusPodFunc = func(podID string) (vc.PodStatus, error) {
+		return vc.PodStatus{}, nil
 	}
 
-	sandbox, err := m.StatusSandbox(testSandboxID)
+	pod, err := m.StatusPod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, vc.SandboxStatus{})
+	assert.Equal(pod, vc.PodStatus{})
 
 	// reset
-	m.StatusSandboxFunc = nil
+	m.StatusPodFunc = nil
 
-	_, err = m.StatusSandbox(testSandboxID)
+	_, err = m.StatusPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
 
-func TestVCMockStopSandbox(t *testing.T) {
+func TestVCMockStopPod(t *testing.T) {
 	assert := assert.New(t)
 
 	m := &VCMock{}
-	assert.Nil(m.StopSandboxFunc)
+	assert.Nil(m.StopPodFunc)
 
-	_, err := m.StopSandbox(testSandboxID)
+	_, err := m.StopPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StopSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
+	m.StopPodFunc = func(podID string) (vc.VCPod, error) {
+		return &Pod{}, nil
 	}
 
-	sandbox, err := m.StopSandbox(testSandboxID)
+	pod, err := m.StopPod(testPodID)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 
 	// reset
-	m.StopSandboxFunc = nil
+	m.StopPodFunc = nil
 
-	_, err = m.StopSandbox(testSandboxID)
+	_, err = m.StopPod(testPodID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -349,23 +358,23 @@ func TestVCMockCreateContainer(t *testing.T) {
 	assert.Nil(m.CreateContainerFunc)
 
 	config := vc.ContainerConfig{}
-	_, _, err := m.CreateContainer(testSandboxID, config)
+	_, _, err := m.CreateContainer(testPodID, config)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.CreateContainerFunc = func(sandboxID string, containerConfig vc.ContainerConfig) (vc.VCSandbox, vc.VCContainer, error) {
-		return &Sandbox{}, &Container{}, nil
+	m.CreateContainerFunc = func(podID string, containerConfig vc.ContainerConfig) (vc.VCPod, vc.VCContainer, error) {
+		return &Pod{}, &Container{}, nil
 	}
 
-	sandbox, container, err := m.CreateContainer(testSandboxID, config)
+	pod, container, err := m.CreateContainer(testPodID, config)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 	assert.Equal(container, &Container{})
 
 	// reset
 	m.CreateContainerFunc = nil
 
-	_, _, err = m.CreateContainer(testSandboxID, config)
+	_, _, err = m.CreateContainer(testPodID, config)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -376,22 +385,22 @@ func TestVCMockDeleteContainer(t *testing.T) {
 	m := &VCMock{}
 	assert.Nil(m.DeleteContainerFunc)
 
-	_, err := m.DeleteContainer(testSandboxID, testContainerID)
+	_, err := m.DeleteContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.DeleteContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
+	m.DeleteContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
 		return &Container{}, nil
 	}
 
-	container, err := m.DeleteContainer(testSandboxID, testContainerID)
+	container, err := m.DeleteContainer(testPodID, testContainerID)
 	assert.NoError(err)
 	assert.Equal(container, &Container{})
 
 	// reset
 	m.DeleteContainerFunc = nil
 
-	_, err = m.DeleteContainer(testSandboxID, testContainerID)
+	_, err = m.DeleteContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -403,24 +412,24 @@ func TestVCMockEnterContainer(t *testing.T) {
 	assert.Nil(m.EnterContainerFunc)
 
 	cmd := vc.Cmd{}
-	_, _, _, err := m.EnterContainer(testSandboxID, testContainerID, cmd)
+	_, _, _, err := m.EnterContainer(testPodID, testContainerID, cmd)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.EnterContainerFunc = func(sandboxID, containerID string, cmd vc.Cmd) (vc.VCSandbox, vc.VCContainer, *vc.Process, error) {
-		return &Sandbox{}, &Container{}, &vc.Process{}, nil
+	m.EnterContainerFunc = func(podID, containerID string, cmd vc.Cmd) (vc.VCPod, vc.VCContainer, *vc.Process, error) {
+		return &Pod{}, &Container{}, &vc.Process{}, nil
 	}
 
-	sandbox, container, process, err := m.EnterContainer(testSandboxID, testContainerID, cmd)
+	pod, container, process, err := m.EnterContainer(testPodID, testContainerID, cmd)
 	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
+	assert.Equal(pod, &Pod{})
 	assert.Equal(container, &Container{})
 	assert.Equal(process, &vc.Process{})
 
 	// reset
 	m.EnterContainerFunc = nil
 
-	_, _, _, err = m.EnterContainer(testSandboxID, testContainerID, cmd)
+	_, _, _, err = m.EnterContainer(testPodID, testContainerID, cmd)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -434,17 +443,17 @@ func TestVCMockKillContainer(t *testing.T) {
 	sig := syscall.SIGTERM
 
 	for _, all := range []bool{true, false} {
-		err := m.KillContainer(testSandboxID, testContainerID, sig, all)
+		err := m.KillContainer(testPodID, testContainerID, sig, all)
 		assert.Error(err)
 		assert.True(IsMockError(err))
 	}
 
-	m.KillContainerFunc = func(sandboxID, containerID string, signal syscall.Signal, all bool) error {
+	m.KillContainerFunc = func(podID, containerID string, signal syscall.Signal, all bool) error {
 		return nil
 	}
 
 	for _, all := range []bool{true, false} {
-		err := m.KillContainer(testSandboxID, testContainerID, sig, all)
+		err := m.KillContainer(testPodID, testContainerID, sig, all)
 		assert.NoError(err)
 	}
 
@@ -452,7 +461,7 @@ func TestVCMockKillContainer(t *testing.T) {
 	m.KillContainerFunc = nil
 
 	for _, all := range []bool{true, false} {
-		err := m.KillContainer(testSandboxID, testContainerID, sig, all)
+		err := m.KillContainer(testPodID, testContainerID, sig, all)
 		assert.Error(err)
 		assert.True(IsMockError(err))
 	}
@@ -464,22 +473,22 @@ func TestVCMockStartContainer(t *testing.T) {
 	m := &VCMock{}
 	assert.Nil(m.StartContainerFunc)
 
-	_, err := m.StartContainer(testSandboxID, testContainerID)
+	_, err := m.StartContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StartContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
+	m.StartContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
 		return &Container{}, nil
 	}
 
-	container, err := m.StartContainer(testSandboxID, testContainerID)
+	container, err := m.StartContainer(testPodID, testContainerID)
 	assert.NoError(err)
 	assert.Equal(container, &Container{})
 
 	// reset
 	m.StartContainerFunc = nil
 
-	_, err = m.StartContainer(testSandboxID, testContainerID)
+	_, err = m.StartContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -490,49 +499,22 @@ func TestVCMockStatusContainer(t *testing.T) {
 	m := &VCMock{}
 	assert.Nil(m.StatusContainerFunc)
 
-	_, err := m.StatusContainer(testSandboxID, testContainerID)
+	_, err := m.StatusContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
+	m.StatusContainerFunc = func(podID, containerID string) (vc.ContainerStatus, error) {
 		return vc.ContainerStatus{}, nil
 	}
 
-	status, err := m.StatusContainer(testSandboxID, testContainerID)
+	status, err := m.StatusContainer(testPodID, testContainerID)
 	assert.NoError(err)
 	assert.Equal(status, vc.ContainerStatus{})
 
 	// reset
 	m.StatusContainerFunc = nil
 
-	_, err = m.StatusContainer(testSandboxID, testContainerID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-}
-
-func TestVCMockStatsContainer(t *testing.T) {
-	assert := assert.New(t)
-
-	m := &VCMock{}
-	assert.Nil(m.StatsContainerFunc)
-
-	_, err := m.StatsContainer(testSandboxID, testContainerID)
-
-	assert.Error(err)
-	assert.True(IsMockError(err))
-
-	m.StatsContainerFunc = func(sandboxID, containerID string) (vc.ContainerStats, error) {
-		return vc.ContainerStats{}, nil
-	}
-
-	stats, err := m.StatsContainer(testSandboxID, testContainerID)
-	assert.NoError(err)
-	assert.Equal(stats, vc.ContainerStats{})
-
-	// reset
-	m.StatsContainerFunc = nil
-
-	_, err = m.StatsContainer(testSandboxID, testContainerID)
+	_, err = m.StatusContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -543,22 +525,22 @@ func TestVCMockStopContainer(t *testing.T) {
 	m := &VCMock{}
 	assert.Nil(m.StopContainerFunc)
 
-	_, err := m.StopContainer(testSandboxID, testContainerID)
+	_, err := m.StopContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
-	m.StopContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
+	m.StopContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
 		return &Container{}, nil
 	}
 
-	container, err := m.StopContainer(testSandboxID, testContainerID)
+	container, err := m.StopContainer(testPodID, testContainerID)
 	assert.NoError(err)
 	assert.Equal(container, &Container{})
 
 	// reset
 	m.StopContainerFunc = nil
 
-	_, err = m.StopContainer(testSandboxID, testContainerID)
+	_, err = m.StopContainer(testPodID, testContainerID)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }
@@ -574,104 +556,24 @@ func TestVCMockProcessListContainer(t *testing.T) {
 		Args:   []string{"-ef"},
 	}
 
-	_, err := m.ProcessListContainer(testSandboxID, testContainerID, options)
+	_, err := m.ProcessListContainer(testPodID, testContainerID, options)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 
 	processList := vc.ProcessList("hi")
 
-	m.ProcessListContainerFunc = func(sandboxID, containerID string, options vc.ProcessListOptions) (vc.ProcessList, error) {
+	m.ProcessListContainerFunc = func(podID, containerID string, options vc.ProcessListOptions) (vc.ProcessList, error) {
 		return processList, nil
 	}
 
-	pList, err := m.ProcessListContainer(testSandboxID, testContainerID, options)
+	pList, err := m.ProcessListContainer(testPodID, testContainerID, options)
 	assert.NoError(err)
 	assert.Equal(pList, processList)
 
 	// reset
 	m.ProcessListContainerFunc = nil
 
-	_, err = m.ProcessListContainer(testSandboxID, testContainerID, options)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-}
-
-func TestVCMockFetchSandbox(t *testing.T) {
-	assert := assert.New(t)
-
-	m := &VCMock{}
-	config := &vc.SandboxConfig{}
-	assert.Nil(m.FetchSandboxFunc)
-
-	_, err := m.FetchSandbox(config.ID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-
-	m.FetchSandboxFunc = func(id string) (vc.VCSandbox, error) {
-		return &Sandbox{}, nil
-	}
-
-	sandbox, err := m.FetchSandbox(config.ID)
-	assert.NoError(err)
-	assert.Equal(sandbox, &Sandbox{})
-
-	// reset
-	m.FetchSandboxFunc = nil
-
-	_, err = m.FetchSandbox(config.ID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-
-}
-
-func TestVCMockPauseContainer(t *testing.T) {
-	assert := assert.New(t)
-
-	m := &VCMock{}
-	config := &vc.SandboxConfig{}
-	assert.Nil(m.PauseContainerFunc)
-
-	err := m.PauseContainer(config.ID, config.ID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-
-	m.PauseContainerFunc = func(sid, cid string) error {
-		return nil
-	}
-
-	err = m.PauseContainer(config.ID, config.ID)
-	assert.NoError(err)
-
-	// reset
-	m.PauseContainerFunc = nil
-
-	err = m.PauseContainer(config.ID, config.ID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-}
-
-func TestVCMockResumeContainer(t *testing.T) {
-	assert := assert.New(t)
-
-	m := &VCMock{}
-	config := &vc.SandboxConfig{}
-	assert.Nil(m.ResumeContainerFunc)
-
-	err := m.ResumeContainer(config.ID, config.ID)
-	assert.Error(err)
-	assert.True(IsMockError(err))
-
-	m.ResumeContainerFunc = func(sid, cid string) error {
-		return nil
-	}
-
-	err = m.ResumeContainer(config.ID, config.ID)
-	assert.NoError(err)
-
-	// reset
-	m.ResumeContainerFunc = nil
-
-	err = m.ResumeContainer(config.ID, config.ID)
+	_, err = m.ProcessListContainer(testPodID, testContainerID, options)
 	assert.Error(err)
 	assert.True(IsMockError(err))
 }

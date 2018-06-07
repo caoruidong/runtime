@@ -1,13 +1,21 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
 import (
 	"flag"
-	"os"
 	"testing"
 
 	vc "github.com/kata-containers/runtime/virtcontainers"
@@ -37,82 +45,90 @@ func TestPSCLIAction(t *testing.T) {
 func TestPSFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	sandbox := &vcmock.Sandbox{
+	pod := &vcmock.Pod{
 		MockID: testContainerID,
 	}
 
-	sandbox.MockContainers = []*vcmock.Container{
+	pod.MockContainers = []*vcmock.Container{
 		{
-			MockID:      sandbox.ID(),
-			MockSandbox: sandbox,
+			MockID:  pod.ID(),
+			MockPod: pod,
 		},
 	}
 
-	path, err := createTempContainerIDMapping(sandbox.ID(), sandbox.ID())
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return vc.ContainerStatus{
-			ID: sandbox.ID(),
-			Annotations: map[string]string{
-				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		// return a podStatus with the container status
+		return []vc.PodStatus{
+			{
+				ID: pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{
+					{
+						ID: pod.ID(),
+						Annotations: map[string]string{
+							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+						},
+					},
+				},
 			},
 		}, nil
 	}
 
 	defer func() {
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	// inexistent container
-	err = ps("xyz123abc", "json", []string{"-ef"})
+	err := ps("xyz123abc", "json", []string{"-ef"})
 	assert.Error(err)
 
 	// container is not running
-	err = ps(sandbox.ID(), "json", []string{"-ef"})
+	err = ps(pod.ID(), "json", []string{"-ef"})
 	assert.Error(err)
 }
 
 func TestPSSuccessful(t *testing.T) {
 	assert := assert.New(t)
 
-	sandbox := &vcmock.Sandbox{
+	pod := &vcmock.Pod{
 		MockID: testContainerID,
 	}
 
-	sandbox.MockContainers = []*vcmock.Container{
+	pod.MockContainers = []*vcmock.Container{
 		{
-			MockID:      sandbox.ID(),
-			MockSandbox: sandbox,
+			MockID:  pod.ID(),
+			MockPod: pod,
 		},
 	}
 
-	path, err := createTempContainerIDMapping(sandbox.ID(), sandbox.ID())
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return vc.ContainerStatus{
-			State: vc.State{
-				State: vc.StateRunning,
-			},
-			ID: sandbox.ID(),
-			Annotations: map[string]string{
-				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		// return a podStatus with the container status
+		return []vc.PodStatus{
+			{
+				ID: pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{
+					{
+						State: vc.State{
+							State: vc.StateRunning,
+						},
+						ID: pod.ID(),
+						Annotations: map[string]string{
+							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+						},
+					},
+				},
 			},
 		}, nil
 	}
 
-	testingImpl.ProcessListContainerFunc = func(sandboxID, containerID string, options vc.ProcessListOptions) (vc.ProcessList, error) {
+	testingImpl.ProcessListContainerFunc = func(podID, containerID string, options vc.ProcessListOptions) (vc.ProcessList, error) {
 		return []byte("echo,sleep,grep"), nil
 	}
 
 	defer func() {
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ListPodFunc = nil
 		testingImpl.ProcessListContainerFunc = nil
 	}()
 
-	err = ps(sandbox.ID(), "json", []string{})
+	err := ps(pod.ID(), "json", []string{})
 	assert.NoError(err)
 }

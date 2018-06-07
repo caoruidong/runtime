@@ -1,13 +1,21 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017-2018 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -52,8 +60,6 @@ var kataLog *logrus.Entry
 // current log level back to its original value if debug output is not
 // required.
 var originalLoggerLevel logrus.Level
-
-var debug = false
 
 // if true, coredump when an internal error occurs or a fatal signal is received
 var crashOnError = false
@@ -113,11 +119,8 @@ var runtimeCommands = []cli.Command{
 	psCLICommand,
 	resumeCLICommand,
 	runCLICommand,
-	specCLICommand,
 	startCLICommand,
 	stateCLICommand,
-	updateCLICommand,
-	eventsCLICommand,
 	versionCLICommand,
 
 	// Kata Containers specific extensions
@@ -161,27 +164,18 @@ func init() {
 func setupSignalHandler() {
 	sigCh := make(chan os.Signal, 8)
 
-	for _, sig := range handledSignals() {
+	for _, sig := range fatalSignals() {
 		signal.Notify(sigCh, sig)
 	}
 
 	go func() {
-		for {
-			sig := <-sigCh
+		sig := <-sigCh
 
-			nativeSignal, ok := sig.(syscall.Signal)
-			if !ok {
-				err := errors.New("unknown signal")
-				kataLog.WithError(err).WithField("signal", sig.String()).Error()
-				continue
-			}
-
+		nativeSignal, ok := sig.(syscall.Signal)
+		if ok {
 			if fatalSignal(nativeSignal) {
 				kataLog.WithField("signal", sig).Error("received fatal signal")
 				die()
-			} else if debug && nonFatalSignal(nativeSignal) {
-				kataLog.WithField("signal", sig).Debug("handling signal")
-				backtrace()
 			}
 		}
 	}()

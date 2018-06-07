@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -10,10 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
 	"testing"
 
-	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 	. "github.com/kata-containers/runtime/virtcontainers/pkg/mock"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -24,7 +33,6 @@ var testContainerIDHook = "test-container-id"
 var testControllerIDHook = "test-controller-id"
 var testProcessIDHook = 12345
 var testBinHookPath = "/usr/bin/virtcontainers/bin/test/hook"
-var testBundlePath = "/test/bundle"
 
 func getMockHookBinPath() string {
 	if DefaultMockHookBinPath == "" {
@@ -35,32 +43,15 @@ func getMockHookBinPath() string {
 }
 
 func TestBuildHookState(t *testing.T) {
-	t.Skip()
 	expected := specs.State{
 		Pid: testProcessIDHook,
 	}
 
-	s := &Sandbox{}
-
-	hookState := buildHookState(testProcessIDHook, s)
+	hookState := buildHookState(testProcessIDHook)
 
 	if reflect.DeepEqual(hookState, expected) == false {
 		t.Fatal()
 	}
-
-	s = createTestSandbox()
-	hookState = buildHookState(testProcessIDHook, s)
-
-	expected = specs.State{
-		Pid:    testProcessIDHook,
-		Bundle: testBundlePath,
-		ID:     testSandboxID,
-	}
-
-	if reflect.DeepEqual(hookState, expected) == false {
-		t.Fatal()
-	}
-
 }
 
 func createHook(timeout int) *Hook {
@@ -80,24 +71,10 @@ func createWrongHook() *Hook {
 	}
 }
 
-func createTestSandbox() *Sandbox {
-	c := &SandboxConfig{
-		Annotations: map[string]string{
-			vcAnnotations.BundlePathKey: testBundlePath,
-		},
-	}
-	return &Sandbox{
-		annotationsLock: &sync.RWMutex{},
-		config:          c,
-		id:              testSandboxID,
-	}
-}
-
 func testRunHookFull(t *testing.T, timeout int, expectFail bool) {
 	hook := createHook(timeout)
 
-	s := createTestSandbox()
-	err := hook.runHook(s)
+	err := hook.runHook()
 	if expectFail {
 		if err == nil {
 			t.Fatal("unexpected success")
@@ -125,9 +102,8 @@ func TestRunHookTimeout(t *testing.T) {
 
 func TestRunHookExitFailure(t *testing.T) {
 	hook := createWrongHook()
-	s := createTestSandbox()
 
-	err := hook.runHook(s)
+	err := hook.runHook()
 	if err == nil {
 		t.Fatal()
 	}
@@ -138,9 +114,7 @@ func TestRunHookTimeoutFailure(t *testing.T) {
 
 	hook.Args = append(hook.Args, "2")
 
-	s := createTestSandbox()
-
-	err := hook.runHook(s)
+	err := hook.runHook()
 	if err == nil {
 		t.Fatal()
 	}
@@ -150,9 +124,8 @@ func TestRunHookWaitFailure(t *testing.T) {
 	hook := createHook(60)
 
 	hook.Args = append(hook.Args, "1", "panic")
-	s := createTestSandbox()
 
-	err := hook.runHook(s)
+	err := hook.runHook()
 	if err == nil {
 		t.Fatal()
 	}
@@ -194,19 +167,18 @@ func testHooks(t *testing.T, hook *Hook) {
 		PostStartHooks: []Hook{*hook},
 		PostStopHooks:  []Hook{*hook},
 	}
-	s := createTestSandbox()
 
-	err := hooks.preStartHooks(s)
+	err := hooks.preStartHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStartHooks(s)
+	err = hooks.postStartHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStopHooks(s)
+	err = hooks.postStopHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,19 +190,18 @@ func testFailingHooks(t *testing.T, hook *Hook) {
 		PostStartHooks: []Hook{*hook},
 		PostStopHooks:  []Hook{*hook},
 	}
-	s := createTestSandbox()
 
-	err := hooks.preStartHooks(s)
+	err := hooks.preStartHooks()
 	if err == nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStartHooks(s)
+	err = hooks.postStartHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStopHooks(s)
+	err = hooks.postStopHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,19 +221,18 @@ func TestFailingHooks(t *testing.T) {
 
 func TestEmptyHooks(t *testing.T) {
 	hooks := &Hooks{}
-	s := createTestSandbox()
 
-	err := hooks.preStartHooks(s)
+	err := hooks.preStartHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStartHooks(s)
+	err = hooks.postStartHooks()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = hooks.postStopHooks(s)
+	err = hooks.postStopHooks()
 	if err != nil {
 		t.Fatal(err)
 	}

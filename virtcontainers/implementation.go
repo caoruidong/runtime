@@ -1,7 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 // Description: The true virtcontainers function of the same name.
 // This indirection is required to allow an alternative implemenation to be
@@ -12,7 +21,6 @@ package virtcontainers
 import (
 	"syscall"
 
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,113 +33,87 @@ func (impl *VCImpl) SetLogger(logger logrus.FieldLogger) {
 	SetLogger(logger)
 }
 
-// CreateSandbox implements the VC function of the same name.
-func (impl *VCImpl) CreateSandbox(sandboxConfig SandboxConfig) (VCSandbox, error) {
-	return CreateSandbox(sandboxConfig)
+// CreatePod implements the VC function of the same name.
+func (impl *VCImpl) CreatePod(podConfig PodConfig) (VCPod, error) {
+	return CreatePod(podConfig)
 }
 
-// DeleteSandbox implements the VC function of the same name.
-func (impl *VCImpl) DeleteSandbox(sandboxID string) (VCSandbox, error) {
-	return DeleteSandbox(sandboxID)
+// DeletePod implements the VC function of the same name.
+func (impl *VCImpl) DeletePod(podID string) (VCPod, error) {
+	return DeletePod(podID)
 }
 
-// StartSandbox implements the VC function of the same name.
-func (impl *VCImpl) StartSandbox(sandboxID string) (VCSandbox, error) {
-	return StartSandbox(sandboxID)
+// StartPod implements the VC function of the same name.
+func (impl *VCImpl) StartPod(podID string) (VCPod, error) {
+	return StartPod(podID)
 }
 
-// StopSandbox implements the VC function of the same name.
-func (impl *VCImpl) StopSandbox(sandboxID string) (VCSandbox, error) {
-	return StopSandbox(sandboxID)
+// StopPod implements the VC function of the same name.
+func (impl *VCImpl) StopPod(podID string) (VCPod, error) {
+	return StopPod(podID)
 }
 
-// RunSandbox implements the VC function of the same name.
-func (impl *VCImpl) RunSandbox(sandboxConfig SandboxConfig) (VCSandbox, error) {
-	return RunSandbox(sandboxConfig)
+// RunPod implements the VC function of the same name.
+func (impl *VCImpl) RunPod(podConfig PodConfig) (VCPod, error) {
+	return RunPod(podConfig)
 }
 
-// ListSandbox implements the VC function of the same name.
-func (impl *VCImpl) ListSandbox() ([]SandboxStatus, error) {
-	return ListSandbox()
+// ListPod implements the VC function of the same name.
+func (impl *VCImpl) ListPod() ([]PodStatus, error) {
+	return ListPod()
 }
 
-// FetchSandbox will find out and connect to an existing sandbox and
-// return the sandbox structure.
-func (impl *VCImpl) FetchSandbox(sandboxID string) (VCSandbox, error) {
-	return FetchSandbox(sandboxID)
+// StatusPod implements the VC function of the same name.
+func (impl *VCImpl) StatusPod(podID string) (PodStatus, error) {
+	return StatusPod(podID)
 }
 
-// StatusSandbox implements the VC function of the same name.
-func (impl *VCImpl) StatusSandbox(sandboxID string) (SandboxStatus, error) {
-	return StatusSandbox(sandboxID)
+// PausePod implements the VC function of the same name.
+func (impl *VCImpl) PausePod(podID string) (VCPod, error) {
+	return PausePod(podID)
 }
 
-// PauseSandbox implements the VC function of the same name.
-func (impl *VCImpl) PauseSandbox(sandboxID string) (VCSandbox, error) {
-	return PauseSandbox(sandboxID)
-}
-
-// ResumeSandbox implements the VC function of the same name.
-func (impl *VCImpl) ResumeSandbox(sandboxID string) (VCSandbox, error) {
-	return ResumeSandbox(sandboxID)
+// ResumePod implements the VC function of the same name.
+func (impl *VCImpl) ResumePod(podID string) (VCPod, error) {
+	return ResumePod(podID)
 }
 
 // CreateContainer implements the VC function of the same name.
-func (impl *VCImpl) CreateContainer(sandboxID string, containerConfig ContainerConfig) (VCSandbox, VCContainer, error) {
-	return CreateContainer(sandboxID, containerConfig)
+func (impl *VCImpl) CreateContainer(podID string, containerConfig ContainerConfig) (VCPod, VCContainer, error) {
+	return CreateContainer(podID, containerConfig)
 }
 
 // DeleteContainer implements the VC function of the same name.
-func (impl *VCImpl) DeleteContainer(sandboxID, containerID string) (VCContainer, error) {
-	return DeleteContainer(sandboxID, containerID)
+func (impl *VCImpl) DeleteContainer(podID, containerID string) (VCContainer, error) {
+	return DeleteContainer(podID, containerID)
 }
 
 // StartContainer implements the VC function of the same name.
-func (impl *VCImpl) StartContainer(sandboxID, containerID string) (VCContainer, error) {
-	return StartContainer(sandboxID, containerID)
+func (impl *VCImpl) StartContainer(podID, containerID string) (VCContainer, error) {
+	return StartContainer(podID, containerID)
 }
 
 // StopContainer implements the VC function of the same name.
-func (impl *VCImpl) StopContainer(sandboxID, containerID string) (VCContainer, error) {
-	return StopContainer(sandboxID, containerID)
+func (impl *VCImpl) StopContainer(podID, containerID string) (VCContainer, error) {
+	return StopContainer(podID, containerID)
 }
 
 // EnterContainer implements the VC function of the same name.
-func (impl *VCImpl) EnterContainer(sandboxID, containerID string, cmd Cmd) (VCSandbox, VCContainer, *Process, error) {
-	return EnterContainer(sandboxID, containerID, cmd)
+func (impl *VCImpl) EnterContainer(podID, containerID string, cmd Cmd) (VCPod, VCContainer, *Process, error) {
+	return EnterContainer(podID, containerID, cmd)
 }
 
 // StatusContainer implements the VC function of the same name.
-func (impl *VCImpl) StatusContainer(sandboxID, containerID string) (ContainerStatus, error) {
-	return StatusContainer(sandboxID, containerID)
-}
-
-// StatsContainer implements the VC function of the same name.
-func (impl *VCImpl) StatsContainer(sandboxID, containerID string) (ContainerStats, error) {
-	return StatsContainer(sandboxID, containerID)
+func (impl *VCImpl) StatusContainer(podID, containerID string) (ContainerStatus, error) {
+	return StatusContainer(podID, containerID)
 }
 
 // KillContainer implements the VC function of the same name.
-func (impl *VCImpl) KillContainer(sandboxID, containerID string, signal syscall.Signal, all bool) error {
-	return KillContainer(sandboxID, containerID, signal, all)
+func (impl *VCImpl) KillContainer(podID, containerID string, signal syscall.Signal, all bool) error {
+	return KillContainer(podID, containerID, signal, all)
 }
 
 // ProcessListContainer implements the VC function of the same name.
-func (impl *VCImpl) ProcessListContainer(sandboxID, containerID string, options ProcessListOptions) (ProcessList, error) {
-	return ProcessListContainer(sandboxID, containerID, options)
-}
-
-// UpdateContainer implements the VC function of the same name.
-func (impl *VCImpl) UpdateContainer(sandboxID, containerID string, resources specs.LinuxResources) error {
-	return UpdateContainer(sandboxID, containerID, resources)
-}
-
-// PauseContainer implements the VC function of the same name.
-func (impl *VCImpl) PauseContainer(sandboxID, containerID string) error {
-	return PauseContainer(sandboxID, containerID)
-}
-
-// ResumeContainer implements the VC function of the same name.
-func (impl *VCImpl) ResumeContainer(sandboxID, containerID string) error {
-	return ResumeContainer(sandboxID, containerID)
+func (impl *VCImpl) ProcessListContainer(podID, containerID string, options ProcessListOptions) (ProcessList, error) {
+	return ProcessListContainer(podID, containerID, options)
 }

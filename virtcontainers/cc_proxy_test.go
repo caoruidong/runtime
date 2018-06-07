@@ -1,6 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -25,36 +35,37 @@ func TestCCProxyStart(t *testing.T) {
 	proxy := &ccProxy{}
 
 	type testData struct {
-		sandbox     *Sandbox
+		pod         Pod
 		expectedURI string
 		expectError bool
 	}
 
 	invalidPath := filepath.Join(tmpdir, "enoent")
-	expectedSocketPath := filepath.Join(runStoragePath, testSandboxID, "proxy.sock")
+	expectedSocketPath := filepath.Join(runStoragePath, testPodID, "proxy.sock")
 	expectedURI := fmt.Sprintf("unix://%s", expectedSocketPath)
 
 	data := []testData{
-		{&Sandbox{}, "", true},
+		{Pod{}, "", true},
 		{
-			&Sandbox{
-				config: &SandboxConfig{
+			Pod{
+				config: &PodConfig{
 					ProxyType: "invalid",
 				},
 			}, "", true,
 		},
 		{
-			&Sandbox{
-				config: &SandboxConfig{
-					ProxyType: CCProxyType,
+			Pod{
+				config: &PodConfig{
+					ProxyType:   CCProxyType,
+					ProxyConfig: ProxyConfig{
 					// invalid - no path
-					ProxyConfig: ProxyConfig{},
+					},
 				},
 			}, "", true,
 		},
 		{
-			&Sandbox{
-				config: &SandboxConfig{
+			Pod{
+				config: &PodConfig{
 					ProxyType: CCProxyType,
 					ProxyConfig: ProxyConfig{
 						Path: invalidPath,
@@ -63,9 +74,9 @@ func TestCCProxyStart(t *testing.T) {
 			}, "", true,
 		},
 		{
-			&Sandbox{
-				id: testSandboxID,
-				config: &SandboxConfig{
+			Pod{
+				id: testPodID,
+				config: &PodConfig{
 					ProxyType: CCProxyType,
 					ProxyConfig: ProxyConfig{
 						Path: "echo",
@@ -76,7 +87,7 @@ func TestCCProxyStart(t *testing.T) {
 	}
 
 	for _, d := range data {
-		pid, uri, err := proxy.start(d.sandbox, proxyParams{})
+		pid, uri, err := proxy.start(d.pod, proxyParams{})
 		if d.expectError {
 			assert.Error(err)
 			continue

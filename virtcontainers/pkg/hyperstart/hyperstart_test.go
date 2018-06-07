@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package hyperstart_test
@@ -383,12 +394,12 @@ func TestCodeFromCmdVersion(t *testing.T) {
 	testCodeFromCmd(t, Version, VersionCode)
 }
 
-func TestCodeFromCmdStartSandbox(t *testing.T) {
-	testCodeFromCmd(t, StartSandbox, StartSandboxCode)
+func TestCodeFromCmdStartPod(t *testing.T) {
+	testCodeFromCmd(t, StartPod, StartPodCode)
 }
 
-func TestCodeFromCmdDestroySandbox(t *testing.T) {
-	testCodeFromCmd(t, DestroySandbox, DestroySandboxCode)
+func TestCodeFromCmdDestroyPod(t *testing.T) {
+	testCodeFromCmd(t, DestroyPod, DestroyPodCode)
 }
 
 func TestCodeFromCmdExecCmd(t *testing.T) {
@@ -530,8 +541,8 @@ func TestWaitForReadyError(t *testing.T) {
 
 var cmdList = []string{
 	Version,
-	StartSandbox,
-	DestroySandbox,
+	StartPod,
+	DestroyPod,
 	ExecCmd,
 	Ready,
 	Ack,

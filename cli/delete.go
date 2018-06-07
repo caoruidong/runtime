@@ -1,8 +1,17 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -53,7 +62,7 @@ EXAMPLE:
 
 func delete(containerID string, force bool) error {
 	// Checks the MUST and MUST NOT from OCI runtime specification
-	status, sandboxID, err := getExistingContainerInfo(containerID)
+	status, podID, err := getExistingContainerInfo(containerID)
 	if err != nil {
 		return err
 	}
@@ -82,11 +91,11 @@ func delete(containerID string, force bool) error {
 
 	switch containerType {
 	case vc.PodSandbox:
-		if err := deleteSandbox(sandboxID); err != nil {
+		if err := deletePod(podID); err != nil {
 			return err
 		}
 	case vc.PodContainer:
-		if err := deleteContainer(sandboxID, containerID, forceStop); err != nil {
+		if err := deleteContainer(podID, containerID, forceStop); err != nil {
 			return err
 		}
 	default:
@@ -96,45 +105,34 @@ func delete(containerID string, force bool) error {
 	// In order to prevent any file descriptor leak related to cgroups files
 	// that have been previously created, we have to remove them before this
 	// function returns.
-	cgroupsPathList, err := processCgroupsPath(ociSpec, containerType.IsSandbox())
+	cgroupsPathList, err := processCgroupsPath(ociSpec, containerType.IsPod())
 	if err != nil {
-		return err
-	}
-
-	if err := delContainerIDMapping(containerID); err != nil {
 		return err
 	}
 
 	return removeCgroupsPath(containerID, cgroupsPathList)
 }
 
-func deleteSandbox(sandboxID string) error {
-	status, err := vci.StatusSandbox(sandboxID)
-	if err != nil {
+func deletePod(podID string) error {
+	if _, err := vci.StopPod(podID); err != nil {
 		return err
 	}
 
-	if oci.StateToOCIState(status.State) != oci.StateStopped {
-		if _, err := vci.StopSandbox(sandboxID); err != nil {
-			return err
-		}
-	}
-
-	if _, err := vci.DeleteSandbox(sandboxID); err != nil {
+	if _, err := vci.DeletePod(podID); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func deleteContainer(sandboxID, containerID string, forceStop bool) error {
+func deleteContainer(podID, containerID string, forceStop bool) error {
 	if forceStop {
-		if _, err := vci.StopContainer(sandboxID, containerID); err != nil {
+		if _, err := vci.StopContainer(podID, containerID); err != nil {
 			return err
 		}
 	}
 
-	if _, err := vci.DeleteContainer(sandboxID, containerID); err != nil {
+	if _, err := vci.DeleteContainer(podID, containerID); err != nil {
 		return err
 	}
 

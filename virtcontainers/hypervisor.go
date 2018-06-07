@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -41,7 +52,7 @@ const (
 )
 
 // In some architectures the maximum number of vCPUs depends on the number of physical cores.
-var defaultMaxQemuVCPUs = MaxQemuVCPUs()
+var defaultMaxQemuVCPUs = maxQemuVCPUs()
 
 // deviceType describes a virtualized device type.
 type deviceType int
@@ -116,6 +127,16 @@ func newHypervisor(hType HypervisorType) (hypervisor, error) {
 	}
 }
 
+//Generic function for creating a named-id for passing on the hypervisor commandline
+func makeNameID(namedType string, id string) string {
+	nameID := fmt.Sprintf("%s-%s", namedType, id)
+	if len(nameID) > maxDevIDSize {
+		nameID = nameID[:maxDevIDSize]
+	}
+
+	return nameID
+}
+
 // Param is a key/value representation for hypervisor and kernel parameters.
 type Param struct {
 	Key   string
@@ -160,7 +181,7 @@ type HypervisorConfig struct {
 	// customAssets is a map of assets.
 	// Each value in that map takes precedence over the configured assets.
 	// For example, if there is a value for the "kernel" key in this map,
-	// it will be used for the sandbox's kernel path instead of KernelPath.
+	// it will be used for the pod's kernel path instead of KernelPath.
 	customAssets map[assetType]*asset
 
 	// DefaultVCPUs specifies default number of vCPUs for the VM.
@@ -170,7 +191,7 @@ type HypervisorConfig struct {
 	DefaultMaxVCPUs uint32
 
 	// DefaultMem specifies default memory size in MiB for the VM.
-	// Sandbox configuration VMConfig.Memory overwrites this.
+	// Pod configuration VMConfig.Memory overwrites this.
 	DefaultMemSz uint32
 
 	// DefaultBridges specifies default number of bridges for the VM.
@@ -179,10 +200,6 @@ type HypervisorConfig struct {
 
 	// DisableBlockDeviceUse disallows a block device from being used.
 	DisableBlockDeviceUse bool
-
-	// EnableIOThreads enables IO to be processed in a separate thread.
-	// Supported currently for virtio-scsi driver.
-	EnableIOThreads bool
 
 	// Debug changes the default hypervisor and kernel parameters to
 	// enable debug output where available.
@@ -205,9 +222,6 @@ type HypervisorConfig struct {
 	// DisableNestingChecks is used to override customizations performed
 	// when running on top of another VMM.
 	DisableNestingChecks bool
-
-	// Msize9p is used as the msize for 9p shares
-	Msize9p uint32
 }
 
 func (conf *HypervisorConfig) valid() (bool, error) {
@@ -237,10 +251,6 @@ func (conf *HypervisorConfig) valid() (bool, error) {
 
 	if conf.DefaultMaxVCPUs == 0 {
 		conf.DefaultMaxVCPUs = defaultMaxQemuVCPUs
-	}
-
-	if conf.Msize9p == 0 {
-		conf.Msize9p = defaultMsize9p
 	}
 
 	return true, nil
@@ -443,8 +453,8 @@ func getHostMemorySizeKb(memInfoPath string) (uint64, error) {
 
 // RunningOnVMM checks if the system is running inside a VM.
 func RunningOnVMM(cpuInfoPath string) (bool, error) {
-	if runtime.GOARCH == "arm64" || runtime.GOARCH == "ppc64le" {
-		virtLog.Info("Unable to know if the system is running inside a VM")
+	if runtime.GOARCH == "arm64" {
+		virtLog.Debugf("Unable to know if the system is running inside a VM")
 		return false, nil
 	}
 
@@ -491,16 +501,16 @@ func RunningOnVMM(cpuInfoPath string) (bool, error) {
 // hypervisor is the virtcontainers hypervisor interface.
 // The default hypervisor implementation is Qemu.
 type hypervisor interface {
-	init(sandbox *Sandbox) error
-	createSandbox(sandboxConfig SandboxConfig) error
-	startSandbox() error
-	waitSandbox(timeout int) error
-	stopSandbox() error
-	pauseSandbox() error
-	resumeSandbox() error
+	init(pod *Pod) error
+	createPod(podConfig PodConfig) error
+	startPod() error
+	waitPod(timeout int) error
+	stopPod() error
+	pausePod() error
+	resumePod() error
 	addDevice(devInfo interface{}, devType deviceType) error
-	hotplugAddDevice(devInfo interface{}, devType deviceType) (interface{}, error)
-	hotplugRemoveDevice(devInfo interface{}, devType deviceType) (interface{}, error)
-	getSandboxConsole(sandboxID string) (string, error)
+	hotplugAddDevice(devInfo interface{}, devType deviceType) error
+	hotplugRemoveDevice(devInfo interface{}, devType deviceType) error
+	getPodConsole(podID string) string
 	capabilities() capabilities
 }

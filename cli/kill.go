@@ -1,8 +1,17 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -12,7 +21,6 @@ import (
 	"syscall"
 
 	vc "github.com/kata-containers/runtime/virtcontainers"
-	"github.com/kata-containers/runtime/virtcontainers/pkg/oci"
 	"github.com/urfave/cli"
 )
 
@@ -91,7 +99,7 @@ var signals = map[string]syscall.Signal{
 
 func kill(containerID, signal string, all bool) error {
 	// Checks the MUST and MUST NOT from OCI runtime specification
-	status, sandboxID, err := getExistingContainerInfo(containerID)
+	status, podID, err := getExistingContainerInfo(containerID)
 	if err != nil {
 		return err
 	}
@@ -103,12 +111,12 @@ func kill(containerID, signal string, all bool) error {
 		return err
 	}
 
-	// container MUST be created, running or paused
-	if status.State.State != vc.StateReady && status.State.State != vc.StateRunning && status.State.State != vc.StatePaused {
-		return fmt.Errorf("Container %s not ready, running or paused, cannot send a signal", containerID)
+	// container MUST be created or running
+	if status.State.State != vc.StateReady && status.State.State != vc.StateRunning {
+		return fmt.Errorf("Container %s not ready or running, cannot send a signal", containerID)
 	}
 
-	if err := vci.KillContainer(sandboxID, containerID, signum, all); err != nil {
+	if err := vci.KillContainer(podID, containerID, signum, all); err != nil {
 		return err
 	}
 
@@ -116,20 +124,7 @@ func kill(containerID, signal string, all bool) error {
 		return nil
 	}
 
-	containerType, err := oci.GetContainerType(status.Annotations)
-	if err != nil {
-		return err
-	}
-
-	switch containerType {
-	case vc.PodSandbox:
-		_, err = vci.StopSandbox(sandboxID)
-	case vc.PodContainer:
-		_, err = vci.StopContainer(sandboxID, containerID)
-	default:
-		return fmt.Errorf("Invalid container type found")
-	}
-
+	_, err = vci.StopContainer(podID, containerID)
 	return err
 }
 

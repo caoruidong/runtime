@@ -1,8 +1,17 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -106,7 +115,7 @@ func create(containerID, bundlePath, console, pidFilePath string, detach bool,
 
 	switch containerType {
 	case vc.PodSandbox:
-		process, err = createSandbox(ociSpec, runtimeConfig, containerID, bundlePath, console, disableOutput)
+		process, err = createPod(ociSpec, runtimeConfig, containerID, bundlePath, console, disableOutput)
 		if err != nil {
 			return err
 		}
@@ -122,7 +131,7 @@ func create(containerID, bundlePath, console, pidFilePath string, detach bool,
 	// is shim's in our case. This is mandatory to make sure there is no one
 	// else (like Docker) trying to create those files on our behalf. We want to
 	// know those files location so that we can remove them when delete is called.
-	cgroupsPathList, err := processCgroupsPath(ociSpec, containerType.IsSandbox())
+	cgroupsPathList, err := processCgroupsPath(ociSpec, containerType.IsPod())
 	if err != nil {
 		return err
 	}
@@ -216,7 +225,7 @@ func setKernelParams(containerID string, runtimeConfig *oci.RuntimeConfig) error
 	return nil
 }
 
-func createSandbox(ociSpec oci.CompatOCISpec, runtimeConfig oci.RuntimeConfig,
+func createPod(ociSpec oci.CompatOCISpec, runtimeConfig oci.RuntimeConfig,
 	containerID, bundlePath, console string, disableOutput bool) (vc.Process, error) {
 
 	err := setKernelParams(containerID, &runtimeConfig)
@@ -224,23 +233,19 @@ func createSandbox(ociSpec oci.CompatOCISpec, runtimeConfig oci.RuntimeConfig,
 		return vc.Process{}, err
 	}
 
-	sandboxConfig, err := oci.SandboxConfig(ociSpec, runtimeConfig, bundlePath, containerID, console, disableOutput)
+	podConfig, err := oci.PodConfig(ociSpec, runtimeConfig, bundlePath, containerID, console, disableOutput)
 	if err != nil {
 		return vc.Process{}, err
 	}
 
-	sandbox, err := vci.CreateSandbox(sandboxConfig)
+	pod, err := vci.CreatePod(podConfig)
 	if err != nil {
 		return vc.Process{}, err
 	}
 
-	containers := sandbox.GetAllContainers()
+	containers := pod.GetAllContainers()
 	if len(containers) != 1 {
-		return vc.Process{}, fmt.Errorf("BUG: Container list from sandbox is wrong, expecting only one container, found %d containers", len(containers))
-	}
-
-	if err := addContainerIDMapping(containerID, sandbox.ID()); err != nil {
-		return vc.Process{}, err
+		return vc.Process{}, fmt.Errorf("BUG: Container list from pod is wrong, expecting only one container, found %d containers", len(containers))
 	}
 
 	return containers[0].Process(), nil
@@ -254,17 +259,13 @@ func createContainer(ociSpec oci.CompatOCISpec, containerID, bundlePath,
 		return vc.Process{}, err
 	}
 
-	sandboxID, err := ociSpec.SandboxID()
+	podID, err := ociSpec.PodID()
 	if err != nil {
 		return vc.Process{}, err
 	}
 
-	_, c, err := vci.CreateContainer(sandboxID, contConfig)
+	_, c, err := vci.CreateContainer(podID, contConfig)
 	if err != nil {
-		return vc.Process{}, err
-	}
-
-	if err := addContainerIDMapping(containerID, sandboxID); err != nil {
 		return vc.Process{}, err
 	}
 

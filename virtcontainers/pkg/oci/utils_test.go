@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package oci
@@ -15,13 +26,11 @@ import (
 	"reflect"
 	"testing"
 
+	vc "github.com/kata-containers/runtime/virtcontainers"
+	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 	"github.com/kubernetes-incubator/cri-o/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
-
-	vc "github.com/kata-containers/runtime/virtcontainers"
-	"github.com/kata-containers/runtime/virtcontainers/device/config"
-	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 )
 
 const tempBundlePath = "/tmp/virtc/ocibundle/"
@@ -42,21 +51,21 @@ func createConfig(fileName string, fileData string) (string, error) {
 	return configPath, nil
 }
 
-func TestMinimalSandboxConfig(t *testing.T) {
+func TestMinimalPodConfig(t *testing.T) {
 	configPath, err := createConfig("config.json", minimalConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	savedFunc := config.GetHostPathFunc
+	savedFunc := vc.GetHostPathFunc
 
 	// Simply assign container path to host path for device.
-	config.GetHostPathFunc = func(devInfo config.DeviceInfo) (string, error) {
+	vc.GetHostPathFunc = func(devInfo vc.DeviceInfo) (string, error) {
 		return devInfo.ContainerPath, nil
 	}
 
 	defer func() {
-		config.GetHostPathFunc = savedFunc
+		vc.GetHostPathFunc = savedFunc
 	}()
 
 	runtimeConfig := RuntimeConfig{
@@ -123,7 +132,7 @@ func TestMinimalSandboxConfig(t *testing.T) {
 
 	var minimalOCISpec CompatOCISpec
 
-	//Marshal and unmarshall json to compare  sandboxConfig and expectedSandboxConfig
+	//Marshal and unmarshall json to compare  podConfig and expectedPodConfig
 	if err := json.Unmarshal([]byte(minimalConfig), &minimalOCISpec); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +141,7 @@ func TestMinimalSandboxConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	devInfo := config.DeviceInfo{
+	devInfo := vc.DeviceInfo{
 		ContainerPath: "/dev/vfio/17",
 		Major:         242,
 		Minor:         0,
@@ -141,7 +150,7 @@ func TestMinimalSandboxConfig(t *testing.T) {
 		GID:           0,
 	}
 
-	expectedDeviceInfo := []config.DeviceInfo{
+	expectedDeviceInfo := []vc.DeviceInfo{
 		devInfo,
 	}
 
@@ -163,7 +172,7 @@ func TestMinimalSandboxConfig(t *testing.T) {
 		NumInterfaces: 1,
 	}
 
-	expectedSandboxConfig := vc.SandboxConfig{
+	expectedPodConfig := vc.PodConfig{
 		ID:       containerID,
 		Hostname: "testHostname",
 
@@ -188,13 +197,13 @@ func TestMinimalSandboxConfig(t *testing.T) {
 		t.Fatalf("Could not parse config.json: %v", err)
 	}
 
-	sandboxConfig, err := SandboxConfig(ociSpec, runtimeConfig, tempBundlePath, containerID, consolePath, false)
+	podConfig, err := PodConfig(ociSpec, runtimeConfig, tempBundlePath, containerID, consolePath, false)
 	if err != nil {
-		t.Fatalf("Could not create Sandbox configuration %v", err)
+		t.Fatalf("Could not create Pod configuration %v", err)
 	}
 
-	if reflect.DeepEqual(sandboxConfig, expectedSandboxConfig) == false {
-		t.Fatalf("Got %v\n expecting %v", sandboxConfig, expectedSandboxConfig)
+	if reflect.DeepEqual(podConfig, expectedPodConfig) == false {
+		t.Fatalf("Got %v\n expecting %v", podConfig, expectedPodConfig)
 	}
 
 	if err := os.Remove(configPath); err != nil {
@@ -437,11 +446,6 @@ func TestStateToOCIState(t *testing.T) {
 	if ociState := StateToOCIState(state); ociState != "stopped" {
 		t.Fatalf("Expecting \"created\" state, got \"%s\"", ociState)
 	}
-
-	state.State = vc.StatePaused
-	if ociState := StateToOCIState(state); ociState != "paused" {
-		t.Fatalf("Expecting \"paused\" state, got \"%s\"", ociState)
-	}
 }
 
 func TestEnvVars(t *testing.T) {
@@ -482,6 +486,12 @@ func TestEnvVars(t *testing.T) {
 func TestMalformedEnvVars(t *testing.T) {
 	envVars := []string{"foo"}
 	r, err := EnvVars(envVars)
+	if err == nil {
+		t.Fatalf("EnvVars() succeeded unexpectedly: [%s] variable=%s value=%s", envVars[0], r[0].Var, r[0].Value)
+	}
+
+	envVars = []string{"TERM="}
+	r, err = EnvVars(envVars)
 	if err == nil {
 		t.Fatalf("EnvVars() succeeded unexpectedly: [%s] variable=%s value=%s", envVars[0], r[0].Var, r[0].Value)
 	}
@@ -603,34 +613,34 @@ func TestContainerTypeFailure(t *testing.T) {
 	}
 }
 
-func TestSandboxIDSuccessful(t *testing.T) {
+func TestPodIDSuccessful(t *testing.T) {
 	var ociSpec CompatOCISpec
-	testSandboxID := "testSandboxID"
+	testPodID := "testPodID"
 
 	ociSpec.Annotations = map[string]string{
-		annotations.SandboxID: testSandboxID,
+		annotations.SandboxID: testPodID,
 	}
 
-	sandboxID, err := ociSpec.SandboxID()
+	podID, err := ociSpec.PodID()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if sandboxID != testSandboxID {
-		t.Fatalf("Got %s, Expecting %s", sandboxID, testSandboxID)
+	if podID != testPodID {
+		t.Fatalf("Got %s, Expecting %s", podID, testPodID)
 	}
 }
 
-func TestSandboxIDFailure(t *testing.T) {
+func TestPodIDFailure(t *testing.T) {
 	var ociSpec CompatOCISpec
 
-	sandboxID, err := ociSpec.SandboxID()
+	podID, err := ociSpec.PodID()
 	if err == nil {
 		t.Fatalf("This test should fail because annotations is empty")
 	}
 
-	if sandboxID != "" {
-		t.Fatalf("Got %s, Expecting empty sandbox ID", sandboxID)
+	if podID != "" {
+		t.Fatalf("Got %s, Expecting empty pod ID", podID)
 	}
 }
 

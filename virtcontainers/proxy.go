@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -10,7 +21,6 @@ import (
 	"path/filepath"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/sirupsen/logrus"
 )
 
 // ProxyConfig is a structure storing information needed from any
@@ -24,7 +34,6 @@ type ProxyConfig struct {
 // for the execution of the proxy binary.
 type proxyParams struct {
 	agentURL string
-	logger   *logrus.Entry
 }
 
 // ProxyType describes a proxy type.
@@ -42,23 +51,12 @@ const (
 
 	// KataProxyType is the kataProxy.
 	KataProxyType ProxyType = "kataProxy"
-
-	// KataBuiltInProxyType is the kataBuiltInProxy.
-	KataBuiltInProxyType ProxyType = "kataBuiltInProxy"
 )
 
 const (
 	// Number of seconds to wait for the proxy to respond to a connection
 	// request.
 	waitForProxyTimeoutSecs = 5.0
-)
-
-const (
-	// unix socket type of console
-	consoleProtoUnix = "unix"
-
-	// pty type of console. Used mostly by kvmtools.
-	consoleProtoPty = "pty"
 )
 
 // Set sets a proxy type based on the input string.
@@ -76,9 +74,6 @@ func (pType *ProxyType) Set(value string) error {
 	case "kataProxy":
 		*pType = KataProxyType
 		return nil
-	case "kataBuiltInProxy":
-		*pType = KataBuiltInProxyType
-		return nil
 	default:
 		return fmt.Errorf("Unknown proxy type %s", value)
 	}
@@ -95,8 +90,6 @@ func (pType *ProxyType) String() string {
 		return string(CCProxyType)
 	case KataProxyType:
 		return string(KataProxyType)
-	case KataBuiltInProxyType:
-		return string(KataBuiltInProxyType)
 	default:
 		return ""
 	}
@@ -113,26 +106,24 @@ func newProxy(pType ProxyType) (proxy, error) {
 		return &ccProxy{}, nil
 	case KataProxyType:
 		return &kataProxy{}, nil
-	case KataBuiltInProxyType:
-		return &kataBuiltInProxy{}, nil
 	default:
 		return &noopProxy{}, nil
 	}
 }
 
-// newProxyConfig returns a proxy config from a generic SandboxConfig handler,
+// newProxyConfig returns a proxy config from a generic PodConfig handler,
 // after it properly checked the configuration was valid.
-func newProxyConfig(sandboxConfig *SandboxConfig) (ProxyConfig, error) {
-	if sandboxConfig == nil {
-		return ProxyConfig{}, fmt.Errorf("Sandbox config cannot be nil")
+func newProxyConfig(podConfig *PodConfig) (ProxyConfig, error) {
+	if podConfig == nil {
+		return ProxyConfig{}, fmt.Errorf("Pod config cannot be nil")
 	}
 
 	var config ProxyConfig
-	switch sandboxConfig.ProxyType {
+	switch podConfig.ProxyType {
 	case KataProxyType:
 		fallthrough
 	case CCProxyType:
-		if err := mapstructure.Decode(sandboxConfig.ProxyConfig, &config); err != nil {
+		if err := mapstructure.Decode(podConfig.ProxyConfig, &config); err != nil {
 			return ProxyConfig{}, err
 		}
 	}
@@ -144,10 +135,10 @@ func newProxyConfig(sandboxConfig *SandboxConfig) (ProxyConfig, error) {
 	return config, nil
 }
 
-func defaultProxyURL(sandbox *Sandbox, socketType string) (string, error) {
+func defaultProxyURL(pod Pod, socketType string) (string, error) {
 	switch socketType {
 	case SocketTypeUNIX:
-		socketPath := filepath.Join(runStoragePath, sandbox.id, "proxy.sock")
+		socketPath := filepath.Join(runStoragePath, pod.id, "proxy.sock")
 		return fmt.Sprintf("unix://%s", socketPath), nil
 	case SocketTypeVSOCK:
 		// TODO Build the VSOCK default URL
@@ -157,17 +148,13 @@ func defaultProxyURL(sandbox *Sandbox, socketType string) (string, error) {
 	}
 }
 
-func isProxyBuiltIn(pType ProxyType) bool {
-	return pType == KataBuiltInProxyType
-}
-
 // proxy is the virtcontainers proxy interface.
 type proxy interface {
-	// start launches a proxy instance for the specified sandbox, returning
+	// start launches a proxy instance for the specified pod, returning
 	// the PID of the process and the URL used to connect to it.
-	start(sandbox *Sandbox, params proxyParams) (int, string, error)
+	start(pod Pod, params proxyParams) (int, string, error)
 
 	// stop terminates a proxy instance after all communications with the
 	// agent inside the VM have been properly stopped.
-	stop(sandbox *Sandbox, pid int) error
+	stop(pod Pod, pid int) error
 }

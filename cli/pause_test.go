@@ -1,27 +1,35 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
 import (
 	"flag"
-	"io/ioutil"
-	"os"
 	"testing"
 
 	vc "github.com/kata-containers/runtime/virtcontainers"
+	"github.com/kata-containers/runtime/virtcontainers/pkg/vcmock"
 	"github.com/stretchr/testify/assert"
 )
 
 var (
-	testPauseContainerFuncReturnNil = func(sandboxID, containerID string) error {
-		return nil
+	testPausePodFuncReturnNil = func(podID string) (vc.VCPod, error) {
+		return &vcmock.Pod{}, nil
 	}
 
-	testResumeContainerFuncReturnNil = func(sandboxID, containerID string) error {
-		return nil
+	testResumePodFuncReturnNil = func(podID string) (vc.VCPod, error) {
+		return &vcmock.Pod{}, nil
 	}
 )
 
@@ -32,19 +40,13 @@ func TestPauseCLIFunctionSuccessful(t *testing.T) {
 		State: vc.StateRunning,
 	}
 
-	testingImpl.PauseContainerFunc = testPauseContainerFuncReturnNil
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return newSingleContainerStatus(testContainerID, state, map[string]string{}), nil
+	testingImpl.PausePodFunc = testPausePodFuncReturnNil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return newSingleContainerPodStatusList(testPodID, testContainerID, state, state, map[string]string{}), nil
 	}
-
 	defer func() {
-		testingImpl.PauseContainerFunc = nil
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.PausePodFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)
@@ -56,15 +58,13 @@ func TestPauseCLIFunctionSuccessful(t *testing.T) {
 func TestPauseCLIFunctionContainerNotExistFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.PauseContainerFunc = testPauseContainerFuncReturnNil
-
-	path, err := ioutil.TempDir("", "containers-mapping")
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	ctrsMapTreePath = path
-
+	testingImpl.PausePodFunc = testPausePodFuncReturnNil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{}, nil
+	}
 	defer func() {
-		testingImpl.PauseContainerFunc = nil
+		testingImpl.PausePodFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)
@@ -73,23 +73,18 @@ func TestPauseCLIFunctionContainerNotExistFailure(t *testing.T) {
 	execCLICommandFunc(assert, pauseCLICommand, set, true)
 }
 
-func TestPauseCLIFunctionPauseContainerFailure(t *testing.T) {
+func TestPauseCLIFunctionPausePodFailure(t *testing.T) {
 	assert := assert.New(t)
 
 	state := vc.State{
 		State: vc.StateRunning,
 	}
 
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return newSingleContainerStatus(testContainerID, state, map[string]string{}), nil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return newSingleContainerPodStatusList(testPodID, testContainerID, state, state, map[string]string{}), nil
 	}
-
 	defer func() {
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)
@@ -105,19 +100,13 @@ func TestResumeCLIFunctionSuccessful(t *testing.T) {
 		State: vc.StateRunning,
 	}
 
-	testingImpl.ResumeContainerFunc = testResumeContainerFuncReturnNil
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return newSingleContainerStatus(testContainerID, state, map[string]string{}), nil
+	testingImpl.ResumePodFunc = testResumePodFuncReturnNil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return newSingleContainerPodStatusList(testPodID, testContainerID, state, state, map[string]string{}), nil
 	}
-
 	defer func() {
-		testingImpl.ResumeContainerFunc = nil
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ResumePodFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)
@@ -129,14 +118,13 @@ func TestResumeCLIFunctionSuccessful(t *testing.T) {
 func TestResumeCLIFunctionContainerNotExistFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ResumeContainerFunc = testResumeContainerFuncReturnNil
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
+	testingImpl.ResumePodFunc = testResumePodFuncReturnNil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{}, nil
+	}
 	defer func() {
-		testingImpl.ResumeContainerFunc = nil
+		testingImpl.ResumePodFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)
@@ -145,23 +133,18 @@ func TestResumeCLIFunctionContainerNotExistFailure(t *testing.T) {
 	execCLICommandFunc(assert, resumeCLICommand, set, true)
 }
 
-func TestResumeCLIFunctionPauseContainerFailure(t *testing.T) {
+func TestResumeCLIFunctionPausePodFailure(t *testing.T) {
 	assert := assert.New(t)
 
 	state := vc.State{
 		State: vc.StateRunning,
 	}
 
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return newSingleContainerStatus(testContainerID, state, map[string]string{}), nil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return newSingleContainerPodStatusList(testPodID, testContainerID, state, state, map[string]string{}), nil
 	}
-
 	defer func() {
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
 	set := flag.NewFlagSet("", 0)

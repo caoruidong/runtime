@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2018 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -13,9 +24,6 @@ import (
 
 	govmmQemu "github.com/intel/govmm/qemu"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/kata-containers/runtime/virtcontainers/device/config"
-	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
 )
 
 const (
@@ -169,7 +177,7 @@ func TestQemuArchBaseCPUTopology(t *testing.T) {
 		MaxCPUs: defaultMaxQemuVCPUs,
 	}
 
-	smp := qemuArchBase.cpuTopology(vcpus, defaultMaxQemuVCPUs)
+	smp := qemuArchBase.cpuTopology(vcpus)
 	assert.Equal(expectedSMP, smp)
 }
 
@@ -208,11 +216,11 @@ func testQemuArchBaseAppend(t *testing.T, structure interface{}, expected []govm
 		devices = qemuArchBase.appendSocket(devices, s)
 	case []Volume:
 		devices = qemuArchBase.append9PVolumes(devices, s)
-	case drivers.Drive:
+	case Drive:
 		devices = qemuArchBase.appendBlockDevice(devices, s)
-	case drivers.VFIODevice:
+	case VFIODevice:
 		devices = qemuArchBase.appendVFIODevice(devices, s)
-	case drivers.VhostUserNetDevice:
+	case VhostUserNetDevice:
 		devices = qemuArchBase.appendVhostUserDevice(devices, &s)
 	}
 
@@ -261,7 +269,7 @@ func TestQemuArchBaseAppendConsoles(t *testing.T) {
 	assert := assert.New(t)
 	qemuArchBase := newQemuArchBase()
 
-	path := filepath.Join(runStoragePath, sandboxID, defaultConsole)
+	path := filepath.Join(runStoragePath, podID, defaultConsole)
 
 	expectedOut := []govmmQemu.Device{
 		govmmQemu.SerialDevice{
@@ -330,7 +338,6 @@ func TestQemuArchBaseAppendBridges(t *testing.T) {
 			ID:      bridges[0].ID,
 			Chassis: 1,
 			SHPC:    true,
-			Addr:    "2",
 		},
 	}
 
@@ -403,7 +410,7 @@ func TestQemuArchBaseAppendBlockDevice(t *testing.T) {
 		},
 	}
 
-	drive := drivers.Drive{
+	drive := Drive{
 		File:   file,
 		Format: format,
 		ID:     id,
@@ -423,11 +430,11 @@ func TestQemuArchBaseAppendVhostUserDevice(t *testing.T) {
 			CharDevID:     fmt.Sprintf("char-%s", id),
 			TypeDevID:     fmt.Sprintf("net-%s", id),
 			Address:       macAddress,
-			VhostUserType: config.VhostUserNet,
+			VhostUserType: VhostUserNet,
 		},
 	}
 
-	vhostUserDevice := drivers.VhostUserNetDevice{
+	vhostUserDevice := VhostUserNetDevice{
 		MacAddress: macAddress,
 	}
 	vhostUserDevice.ID = id
@@ -445,7 +452,7 @@ func TestQemuArchBaseAppendVFIODevice(t *testing.T) {
 		},
 	}
 
-	vfDevice := drivers.VFIODevice{
+	vfDevice := VFIODevice{
 		BDF: bdf,
 	}
 
@@ -463,10 +470,6 @@ func TestQemuArchBaseAppendSCSIController(t *testing.T) {
 		},
 	}
 
-	devices, ioThread := qemuArchBase.appendSCSIController(devices, false)
+	devices = qemuArchBase.appendSCSIController(devices)
 	assert.Equal(expectedOut, devices)
-	assert.Nil(ioThread)
-
-	_, ioThread = qemuArchBase.appendSCSIController(devices, true)
-	assert.NotNil(ioThread)
 }

@@ -841,9 +841,6 @@ type SCSIController struct {
 
 	// DisableModern prevents qemu from relying on fast MMIO.
 	DisableModern bool
-
-	// IOThread is the IO thread on which IO will be handled
-	IOThread string
 }
 
 // Valid returns true if the SCSIController structure is valid and complete.
@@ -869,9 +866,6 @@ func (scsiCon SCSIController) QemuParams(config *Config) []string {
 	}
 	if scsiCon.DisableModern {
 		devParams = append(devParams, fmt.Sprintf("disable-modern=true"))
-	}
-	if scsiCon.IOThread != "" {
-		devParams = append(devParams, fmt.Sprintf("iothread=%s", scsiCon.IOThread))
 	}
 
 	qemuParams = append(qemuParams, "-device")
@@ -907,9 +901,6 @@ type BridgeDevice struct {
 
 	// SHPC is used to enable or disable the standard hot plug controller
 	SHPC bool
-
-	// PCI Slot
-	Addr string
 }
 
 // Valid returns true if the BridgeDevice structure is valid and complete.
@@ -944,13 +935,6 @@ func (bridgeDev BridgeDevice) QemuParams(config *Config) []string {
 	}
 
 	deviceParam := fmt.Sprintf("%s,bus=%s,id=%s,chassis_nr=%d,shpc=%s", deviceName, bridgeDev.Bus, bridgeDev.ID, bridgeDev.Chassis, shpc)
-	if bridgeDev.Addr != "" {
-		addr, err := strconv.Atoi(bridgeDev.Addr)
-		if err == nil && addr >= 0 {
-			deviceParam += fmt.Sprintf(",addr=%x", addr)
-		}
-	}
-
 	qemuParams = append(qemuParams, "-device")
 	qemuParams = append(qemuParams, deviceParam)
 
@@ -1175,11 +1159,6 @@ type Knobs struct {
 	Realtime bool
 }
 
-// IOThread allows IO to be performed on a separate thread.
-type IOThread struct {
-	ID string
-}
-
 // Config is the qemu configuration structure.
 // It allows for passing custom settings and parameters to the qemu API.
 type Config struct {
@@ -1233,8 +1212,6 @@ type Config struct {
 
 	// fds is a list of open file descriptors to be passed to the spawned qemu process
 	fds []*os.File
-
-	IOThreads []IOThread
 
 	qemuParams []string
 }
@@ -1504,15 +1481,6 @@ func (config *Config) appendBios() {
 	}
 }
 
-func (config *Config) appendIOThreads() {
-	for _, t := range config.IOThreads {
-		if t.ID != "" {
-			config.qemuParams = append(config.qemuParams, "-object")
-			config.qemuParams = append(config.qemuParams, fmt.Sprintf("iothread,id=%s", t.ID))
-		}
-	}
-}
-
 // LaunchQemu can be used to launch a new qemu instance.
 //
 // The Config parameter contains a set of qemu parameters and settings.
@@ -1536,7 +1504,6 @@ func LaunchQemu(config Config, logger QMPLog) (string, error) {
 	config.appendKnobs()
 	config.appendKernel()
 	config.appendBios()
-	config.appendIOThreads()
 
 	if err := config.appendCPUs(); err != nil {
 		return "", err

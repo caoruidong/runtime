@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -104,8 +115,8 @@ func (a *asset) hash(hashType string) (string, error) {
 	return hash, nil
 }
 
-// newAsset returns a new asset from the sandbox annotations.
-func newAsset(sandboxConfig *SandboxConfig, t assetType) (*asset, error) {
+// newAsset returns a new asset from the pod annotations.
+func newAsset(podConfig *PodConfig, t assetType) (*asset, error) {
 	pathAnnotation, hashAnnotation, err := t.annotations()
 	if err != nil {
 		return nil, err
@@ -115,7 +126,7 @@ func newAsset(sandboxConfig *SandboxConfig, t assetType) (*asset, error) {
 		return nil, fmt.Errorf("Missing annotation paths for %s", t)
 	}
 
-	path, ok := sandboxConfig.Annotations[pathAnnotation]
+	path, ok := podConfig.Annotations[pathAnnotation]
 	if !ok || path == "" {
 		return nil, nil
 	}
@@ -126,13 +137,13 @@ func newAsset(sandboxConfig *SandboxConfig, t assetType) (*asset, error) {
 
 	a := &asset{path: path, kind: t}
 
-	hash, ok := sandboxConfig.Annotations[hashAnnotation]
+	hash, ok := podConfig.Annotations[hashAnnotation]
 	if !ok || hash == "" {
 		return a, nil
 	}
 
 	// We have a hash annotation, we need to verify the asset against it.
-	hashType, ok := sandboxConfig.Annotations[annotations.AssetHashType]
+	hashType, ok := podConfig.Annotations[annotations.AssetHashType]
 	if !ok {
 		virtLog.Warningf("Unrecognized hash type: %s, switching to %s", hashType, annotations.SHA512)
 		hashType = annotations.SHA512

@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package main
@@ -26,10 +37,10 @@ var statusFormat = "%s\t%s\n"
 
 var (
 	errNeedContainerID = errors.New("Container ID cannot be empty")
-	errNeedSandboxID   = errors.New("Sandbox ID cannot be empty")
+	errNeedPodID       = errors.New("Pod ID cannot be empty")
 )
 
-var sandboxConfigFlags = []cli.Flag{
+var podConfigFlags = []cli.Flag{
 	cli.GenericFlag{
 		Name:  "agent",
 		Value: new(vc.AgentType),
@@ -39,7 +50,7 @@ var sandboxConfigFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:  "id",
 		Value: "",
-		Usage: "the sandbox identifier (default: auto-generated)",
+		Usage: "the pod identifier (default: auto-generated)",
 	},
 
 	cli.StringFlag{
@@ -93,13 +104,13 @@ var sandboxConfigFlags = []cli.Flag{
 	cli.UintFlag{
 		Name:  "cpus",
 		Value: 0,
-		Usage: "the number of virtual cpus available for this sandbox",
+		Usage: "the number of virtual cpus available for this pod",
 	},
 
 	cli.UintFlag{
 		Name:  "memory",
 		Value: 0,
-		Usage: "the amount of memory available for this sandbox in MiB",
+		Usage: "the amount of memory available for this pod in MiB",
 	},
 }
 
@@ -132,7 +143,7 @@ func buildKernelParams(config *vc.HypervisorConfig) error {
 	return nil
 }
 
-func buildSandboxConfig(context *cli.Context) (vc.SandboxConfig, error) {
+func buildPodConfig(context *cli.Context) (vc.PodConfig, error) {
 	var agConfig interface{}
 
 	hyperCtlSockName := context.String("hyper-ctl-sock-name")
@@ -143,22 +154,22 @@ func buildSandboxConfig(context *cli.Context) (vc.SandboxConfig, error) {
 	vmMemory := context.Uint("vm-memory")
 	agentType, ok := context.Generic("agent").(*vc.AgentType)
 	if ok != true {
-		return vc.SandboxConfig{}, fmt.Errorf("Could not convert agent type")
+		return vc.PodConfig{}, fmt.Errorf("Could not convert agent type")
 	}
 
 	networkModel, ok := context.Generic("network").(*vc.NetworkModel)
 	if ok != true {
-		return vc.SandboxConfig{}, fmt.Errorf("Could not convert network model")
+		return vc.PodConfig{}, fmt.Errorf("Could not convert network model")
 	}
 
 	proxyType, ok := context.Generic("proxy").(*vc.ProxyType)
 	if ok != true {
-		return vc.SandboxConfig{}, fmt.Errorf("Could not convert proxy type")
+		return vc.PodConfig{}, fmt.Errorf("Could not convert proxy type")
 	}
 
 	shimType, ok := context.Generic("shim").(*vc.ShimType)
 	if ok != true {
-		return vc.SandboxConfig{}, fmt.Errorf("Could not convert shim type")
+		return vc.PodConfig{}, fmt.Errorf("Could not convert shim type")
 	}
 
 	kernelPath := "/usr/share/clear-containers/vmlinuz.container"
@@ -173,7 +184,7 @@ func buildSandboxConfig(context *cli.Context) (vc.SandboxConfig, error) {
 	}
 
 	if err := buildKernelParams(&hypervisorConfig); err != nil {
-		return vc.SandboxConfig{}, err
+		return vc.PodConfig{}, err
 	}
 
 	netConfig := vc.NetworkConfig{
@@ -200,11 +211,11 @@ func buildSandboxConfig(context *cli.Context) (vc.SandboxConfig, error) {
 
 	id := context.String("id")
 	if id == "" {
-		// auto-generate sandbox name
+		// auto-generate pod name
 		id = uuid.Generate().String()
 	}
 
-	sandboxConfig := vc.SandboxConfig{
+	podConfig := vc.PodConfig{
 		ID:       id,
 		VMConfig: vmConfig,
 
@@ -226,7 +237,7 @@ func buildSandboxConfig(context *cli.Context) (vc.SandboxConfig, error) {
 		Containers: []vc.ContainerConfig{},
 	}
 
-	return sandboxConfig, nil
+	return podConfig, nil
 }
 
 func getProxyConfig(proxyType vc.ProxyType, path string) vc.ProxyConfig {
@@ -260,10 +271,10 @@ func getShimConfig(shimType vc.ShimType, path string) interface{} {
 	return shimConfig
 }
 
-// checkRequiredSandboxArgs checks to ensure the required command-line
-// arguments have been specified for the sandbox sub-command specified by
+// checkRequiredPodArgs checks to ensure the required command-line
+// arguments have been specified for the pod sub-command specified by
 // the context argument.
-func checkRequiredSandboxArgs(context *cli.Context) error {
+func checkRequiredPodArgs(context *cli.Context) error {
 	if context == nil {
 		return fmt.Errorf("BUG: need Context")
 	}
@@ -283,7 +294,7 @@ func checkRequiredSandboxArgs(context *cli.Context) error {
 
 	id := context.String("id")
 	if id == "" {
-		return errNeedSandboxID
+		return errNeedPodID
 	}
 
 	return nil
@@ -300,9 +311,9 @@ func checkRequiredContainerArgs(context *cli.Context) error {
 	// sub-sub-command name
 	name := context.Command.Name
 
-	sandboxID := context.String("sandbox-id")
-	if sandboxID == "" {
-		return errNeedSandboxID
+	podID := context.String("pod-id")
+	if podID == "" {
+		return errNeedPodID
 	}
 
 	rootfs := context.String("rootfs")
@@ -318,38 +329,38 @@ func checkRequiredContainerArgs(context *cli.Context) error {
 	return nil
 }
 
-func runSandbox(context *cli.Context) error {
-	sandboxConfig, err := buildSandboxConfig(context)
+func runPod(context *cli.Context) error {
+	podConfig, err := buildPodConfig(context)
 	if err != nil {
-		return fmt.Errorf("Could not build sandbox config: %s", err)
+		return fmt.Errorf("Could not build pod config: %s", err)
 	}
 
-	_, err = vc.RunSandbox(sandboxConfig)
+	_, err = vc.RunPod(podConfig)
 	if err != nil {
-		return fmt.Errorf("Could not run sandbox: %s", err)
+		return fmt.Errorf("Could not run pod: %s", err)
 	}
 
 	return nil
 }
 
-func createSandbox(context *cli.Context) error {
-	sandboxConfig, err := buildSandboxConfig(context)
+func createPod(context *cli.Context) error {
+	podConfig, err := buildPodConfig(context)
 	if err != nil {
-		return fmt.Errorf("Could not build sandbox config: %s", err)
+		return fmt.Errorf("Could not build pod config: %s", err)
 	}
 
-	p, err := vc.CreateSandbox(sandboxConfig)
+	p, err := vc.CreatePod(podConfig)
 	if err != nil {
-		return fmt.Errorf("Could not create sandbox: %s", err)
+		return fmt.Errorf("Could not create pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s created\n", p.ID())
+	fmt.Printf("Pod %s created\n", p.ID())
 
 	return nil
 }
 
-func checkSandboxArgs(context *cli.Context, f func(context *cli.Context) error) error {
-	if err := checkRequiredSandboxArgs(context); err != nil {
+func checkPodArgs(context *cli.Context, f func(context *cli.Context) error) error {
+	if err := checkRequiredPodArgs(context); err != nil {
 		return err
 	}
 
@@ -364,73 +375,73 @@ func checkContainerArgs(context *cli.Context, f func(context *cli.Context) error
 	return f(context)
 }
 
-func deleteSandbox(context *cli.Context) error {
-	p, err := vc.DeleteSandbox(context.String("id"))
+func deletePod(context *cli.Context) error {
+	p, err := vc.DeletePod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not delete sandbox: %s", err)
+		return fmt.Errorf("Could not delete pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s deleted\n", p.ID())
+	fmt.Printf("Pod %s deleted\n", p.ID())
 
 	return nil
 }
 
-func startSandbox(context *cli.Context) error {
-	p, err := vc.StartSandbox(context.String("id"))
+func startPod(context *cli.Context) error {
+	p, err := vc.StartPod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not start sandbox: %s", err)
+		return fmt.Errorf("Could not start pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s started\n", p.ID())
+	fmt.Printf("Pod %s started\n", p.ID())
 
 	return nil
 }
 
-func stopSandbox(context *cli.Context) error {
-	p, err := vc.StopSandbox(context.String("id"))
+func stopPod(context *cli.Context) error {
+	p, err := vc.StopPod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not stop sandbox: %s", err)
+		return fmt.Errorf("Could not stop pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s stopped\n", p.ID())
+	fmt.Printf("Pod %s stopped\n", p.ID())
 
 	return nil
 }
 
-func pauseSandbox(context *cli.Context) error {
-	p, err := vc.PauseSandbox(context.String("id"))
+func pausePod(context *cli.Context) error {
+	p, err := vc.PausePod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not pause sandbox: %s", err)
+		return fmt.Errorf("Could not pause pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s paused\n", p.ID())
+	fmt.Printf("Pod %s paused\n", p.ID())
 
 	return nil
 }
 
-func resumeSandbox(context *cli.Context) error {
-	p, err := vc.ResumeSandbox(context.String("id"))
+func resumePod(context *cli.Context) error {
+	p, err := vc.ResumePod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not resume sandbox: %s", err)
+		return fmt.Errorf("Could not resume pod: %s", err)
 	}
 
-	fmt.Printf("Sandbox %s resumed\n", p.ID())
+	fmt.Printf("Pod %s resumed\n", p.ID())
 
 	return nil
 }
 
-func listSandboxes(context *cli.Context) error {
-	sandboxStatusList, err := vc.ListSandbox()
+func listPods(context *cli.Context) error {
+	podStatusList, err := vc.ListPod()
 	if err != nil {
-		return fmt.Errorf("Could not list sandbox: %s", err)
+		return fmt.Errorf("Could not list pod: %s", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 2, 8, 1, '\t', 0)
-	fmt.Fprintf(w, listFormat, "SB ID", "STATE", "HYPERVISOR", "AGENT")
+	fmt.Fprintf(w, listFormat, "POD ID", "STATE", "HYPERVISOR", "AGENT")
 
-	for _, sandboxStatus := range sandboxStatusList {
+	for _, podStatus := range podStatusList {
 		fmt.Fprintf(w, listFormat,
-			sandboxStatus.ID, sandboxStatus.State.State, sandboxStatus.Hypervisor, sandboxStatus.Agent)
+			podStatus.ID, podStatus.State.State, podStatus.Hypervisor, podStatus.Agent)
 	}
 
 	w.Flush()
@@ -438,21 +449,21 @@ func listSandboxes(context *cli.Context) error {
 	return nil
 }
 
-func statusSandbox(context *cli.Context) error {
-	sandboxStatus, err := vc.StatusSandbox(context.String("id"))
+func statusPod(context *cli.Context) error {
+	podStatus, err := vc.StatusPod(context.String("id"))
 	if err != nil {
-		return fmt.Errorf("Could not get sandbox status: %s", err)
+		return fmt.Errorf("Could not get pod status: %s", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 2, 8, 1, '\t', 0)
-	fmt.Fprintf(w, listFormat, "SB ID", "STATE", "HYPERVISOR", "AGENT")
+	fmt.Fprintf(w, listFormat, "POD ID", "STATE", "HYPERVISOR", "AGENT")
 
 	fmt.Fprintf(w, listFormat+"\n",
-		sandboxStatus.ID, sandboxStatus.State.State, sandboxStatus.Hypervisor, sandboxStatus.Agent)
+		podStatus.ID, podStatus.State.State, podStatus.Hypervisor, podStatus.Agent)
 
 	fmt.Fprintf(w, statusFormat, "CONTAINER ID", "STATE")
 
-	for _, contStatus := range sandboxStatus.ContainersStatus {
+	for _, contStatus := range podStatus.ContainersStatus {
 		fmt.Fprintf(w, statusFormat, contStatus.ID, contStatus.State.State)
 	}
 
@@ -461,119 +472,119 @@ func statusSandbox(context *cli.Context) error {
 	return nil
 }
 
-var runSandboxCommand = cli.Command{
+var runPodCommand = cli.Command{
 	Name:  "run",
-	Usage: "run a sandbox",
-	Flags: sandboxConfigFlags,
+	Usage: "run a pod",
+	Flags: podConfigFlags,
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, runSandbox)
+		return checkPodArgs(context, runPod)
 	},
 }
 
-var createSandboxCommand = cli.Command{
+var createPodCommand = cli.Command{
 	Name:  "create",
-	Usage: "create a sandbox",
-	Flags: sandboxConfigFlags,
+	Usage: "create a pod",
+	Flags: podConfigFlags,
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, createSandbox)
+		return checkPodArgs(context, createPod)
 	},
 }
 
-var deleteSandboxCommand = cli.Command{
+var deletePodCommand = cli.Command{
 	Name:  "delete",
-	Usage: "delete an existing sandbox",
+	Usage: "delete an existing pod",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, deleteSandbox)
+		return checkPodArgs(context, deletePod)
 	},
 }
 
-var startSandboxCommand = cli.Command{
+var startPodCommand = cli.Command{
 	Name:  "start",
-	Usage: "start an existing sandbox",
+	Usage: "start an existing pod",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, startSandbox)
+		return checkPodArgs(context, startPod)
 	},
 }
 
-var stopSandboxCommand = cli.Command{
+var stopPodCommand = cli.Command{
 	Name:  "stop",
-	Usage: "stop an existing sandbox",
+	Usage: "stop an existing pod",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, stopSandbox)
+		return checkPodArgs(context, stopPod)
 	},
 }
 
-var listSandboxesCommand = cli.Command{
+var listPodsCommand = cli.Command{
 	Name:  "list",
-	Usage: "list all existing sandboxes",
+	Usage: "list all existing pods",
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, listSandboxes)
+		return checkPodArgs(context, listPods)
 	},
 }
 
-var statusSandboxCommand = cli.Command{
+var statusPodCommand = cli.Command{
 	Name:  "status",
-	Usage: "returns a detailed sandbox status",
+	Usage: "returns a detailed pod status",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, statusSandbox)
+		return checkPodArgs(context, statusPod)
 	},
 }
 
-var pauseSandboxCommand = cli.Command{
+var pausePodCommand = cli.Command{
 	Name:  "pause",
-	Usage: "pause an existing sandbox",
+	Usage: "pause an existing pod",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, pauseSandbox)
+		return checkPodArgs(context, pausePod)
 	},
 }
 
-var resumeSandboxCommand = cli.Command{
+var resumePodCommand = cli.Command{
 	Name:  "resume",
-	Usage: "unpause a paused sandbox",
+	Usage: "unpause a paused pod",
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
-		return checkSandboxArgs(context, resumeSandbox)
+		return checkPodArgs(context, resumePod)
 	},
 }
 
@@ -612,7 +623,7 @@ func createContainer(context *cli.Context) error {
 		Cmd:    cmd,
 	}
 
-	_, c, err := vc.CreateContainer(context.String("sandbox-id"), containerConfig)
+	_, c, err := vc.CreateContainer(context.String("pod-id"), containerConfig)
 	if err != nil {
 		return fmt.Errorf("Could not create container: %s", err)
 	}
@@ -623,7 +634,7 @@ func createContainer(context *cli.Context) error {
 }
 
 func deleteContainer(context *cli.Context) error {
-	c, err := vc.DeleteContainer(context.String("sandbox-id"), context.String("id"))
+	c, err := vc.DeleteContainer(context.String("pod-id"), context.String("id"))
 	if err != nil {
 		return fmt.Errorf("Could not delete container: %s", err)
 	}
@@ -634,7 +645,7 @@ func deleteContainer(context *cli.Context) error {
 }
 
 func startContainer(context *cli.Context) error {
-	c, err := vc.StartContainer(context.String("sandbox-id"), context.String("id"))
+	c, err := vc.StartContainer(context.String("pod-id"), context.String("id"))
 	if err != nil {
 		return fmt.Errorf("Could not start container: %s", err)
 	}
@@ -645,7 +656,7 @@ func startContainer(context *cli.Context) error {
 }
 
 func stopContainer(context *cli.Context) error {
-	c, err := vc.StopContainer(context.String("sandbox-id"), context.String("id"))
+	c, err := vc.StopContainer(context.String("pod-id"), context.String("id"))
 	if err != nil {
 		return fmt.Errorf("Could not stop container: %s", err)
 	}
@@ -678,7 +689,7 @@ func enterContainer(context *cli.Context) error {
 		Console:     console,
 	}
 
-	_, c, _, err := vc.EnterContainer(context.String("sandbox-id"), context.String("id"), cmd)
+	_, c, _, err := vc.EnterContainer(context.String("pod-id"), context.String("id"), cmd)
 	if err != nil {
 		return fmt.Errorf("Could not enter container: %s", err)
 	}
@@ -689,7 +700,7 @@ func enterContainer(context *cli.Context) error {
 }
 
 func statusContainer(context *cli.Context) error {
-	contStatus, err := vc.StatusContainer(context.String("sandbox-id"), context.String("id"))
+	contStatus, err := vc.StatusContainer(context.String("pod-id"), context.String("id"))
 	if err != nil {
 		return fmt.Errorf("Could not get container status: %s", err)
 	}
@@ -713,9 +724,9 @@ var createContainerCommand = cli.Command{
 			Usage: "the container identifier (default: auto-generated)",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 		cli.StringFlag{
 			Name:  "rootfs",
@@ -748,9 +759,9 @@ var deleteContainerCommand = cli.Command{
 			Usage: "the container identifier",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
@@ -768,9 +779,9 @@ var startContainerCommand = cli.Command{
 			Usage: "the container identifier",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
@@ -788,9 +799,9 @@ var stopContainerCommand = cli.Command{
 			Usage: "the container identifier",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
@@ -808,9 +819,9 @@ var enterContainerCommand = cli.Command{
 			Usage: "the container identifier",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 		cli.StringFlag{
 			Name:  "cmd",
@@ -838,9 +849,9 @@ var statusContainerCommand = cli.Command{
 			Usage: "the container identifier",
 		},
 		cli.StringFlag{
-			Name:  "sandbox-id",
+			Name:  "pod-id",
 			Value: "",
-			Usage: "the sandbox identifier",
+			Usage: "the pod identifier",
 		},
 	},
 	Action: func(context *cli.Context) error {
@@ -877,18 +888,18 @@ func main() {
 
 	virtc.Commands = []cli.Command{
 		{
-			Name:  "sandbox",
-			Usage: "sandbox commands",
+			Name:  "pod",
+			Usage: "pod commands",
 			Subcommands: []cli.Command{
-				createSandboxCommand,
-				deleteSandboxCommand,
-				listSandboxesCommand,
-				pauseSandboxCommand,
-				resumeSandboxCommand,
-				runSandboxCommand,
-				startSandboxCommand,
-				stopSandboxCommand,
-				statusSandboxCommand,
+				createPodCommand,
+				deletePodCommand,
+				listPodsCommand,
+				pausePodCommand,
+				resumePodCommand,
+				runPodCommand,
+				startPodCommand,
+				stopPodCommand,
+				statusPodCommand,
 			},
 		},
 		{

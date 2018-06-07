@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers_test
@@ -14,9 +25,9 @@ import (
 
 const containerRootfs = "/var/lib/container/bundle/"
 
-// This example creates and starts a single container sandbox,
+// This example creates and starts a single container pod,
 // using qemu as the hypervisor and hyperstart as the VM agent.
-func Example_createAndStartSandbox() {
+func Example_createAndStartPod() {
 	envs := []vc.EnvVar{
 		{
 			Var:   "PATH",
@@ -52,11 +63,11 @@ func Example_createAndStartSandbox() {
 		Memory: 1024,
 	}
 
-	// The sandbox configuration:
+	// The pod configuration:
 	// - One container
 	// - Hypervisor is QEMU
 	// - Agent is hyperstart
-	sandboxConfig := vc.SandboxConfig{
+	podConfig := vc.PodConfig{
 		VMConfig: vmConfig,
 
 		HypervisorType:   vc.QemuHypervisor,
@@ -68,9 +79,9 @@ func Example_createAndStartSandbox() {
 		Containers: []vc.ContainerConfig{container},
 	}
 
-	_, err := vc.RunSandbox(sandboxConfig)
+	_, err := vc.RunPod(podConfig)
 	if err != nil {
-		fmt.Printf("Could not run sandbox: %s", err)
+		fmt.Printf("Could not run pod: %s", err)
 	}
 
 	return

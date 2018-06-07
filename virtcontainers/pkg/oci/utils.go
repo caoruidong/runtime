@@ -1,7 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package oci
 
@@ -16,15 +25,12 @@ import (
 	"strings"
 
 	criContainerdAnnotations "github.com/containerd/cri-containerd/pkg/annotations"
+	vc "github.com/kata-containers/runtime/virtcontainers"
+	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
+	dockershimAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations/dockershim"
 	crioAnnotations "github.com/kubernetes-incubator/cri-o/pkg/annotations"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
-
-	vc "github.com/kata-containers/runtime/virtcontainers"
-	"github.com/kata-containers/runtime/virtcontainers/device/config"
-	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
-	dockershimAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations/dockershim"
-	"github.com/kata-containers/runtime/virtcontainers/utils"
 )
 
 type annotationContainerType struct {
@@ -41,7 +47,7 @@ var (
 	CRIContainerTypeKeyList = []string{criContainerdAnnotations.ContainerType, crioAnnotations.ContainerType, dockershimAnnotations.ContainerTypeLabelKey}
 
 	// CRISandboxNameKeyList lists all the CRI keys that could define
-	// the sandbox ID (sandbox ID) from annotations in the config.json.
+	// the sandbox ID (pod ID) from annotations in the config.json.
 	CRISandboxNameKeyList = []string{criContainerdAnnotations.SandboxID, crioAnnotations.SandboxID, dockershimAnnotations.SandboxIDLabelKey}
 
 	// CRIContainerTypeList lists all the maps from CRI ContainerTypes annotations
@@ -66,9 +72,6 @@ const (
 
 	// StateStopped represents a container that has been stopped.
 	StateStopped = "stopped"
-
-	// StatePaused represents a container that has been paused.
-	StatePaused = "paused"
 )
 
 // CompatOCIProcess is a structure inheriting from spec.Process defined
@@ -214,7 +217,7 @@ func contains(s []string, e string) bool {
 	return false
 }
 
-func newLinuxDeviceInfo(d spec.LinuxDevice) (*config.DeviceInfo, error) {
+func newLinuxDeviceInfo(d spec.LinuxDevice) (*vc.DeviceInfo, error) {
 	allowedDeviceTypes := []string{"c", "b", "u", "p"}
 
 	if !contains(allowedDeviceTypes, d.Type) {
@@ -225,7 +228,7 @@ func newLinuxDeviceInfo(d spec.LinuxDevice) (*config.DeviceInfo, error) {
 		return nil, fmt.Errorf("Path cannot be empty for device")
 	}
 
-	deviceInfo := config.DeviceInfo{
+	deviceInfo := vc.DeviceInfo{
 		ContainerPath: d.Path,
 		DevType:       d.Type,
 		Major:         d.Major,
@@ -246,18 +249,18 @@ func newLinuxDeviceInfo(d spec.LinuxDevice) (*config.DeviceInfo, error) {
 	return &deviceInfo, nil
 }
 
-func containerDeviceInfos(spec CompatOCISpec) ([]config.DeviceInfo, error) {
+func containerDeviceInfos(spec CompatOCISpec) ([]vc.DeviceInfo, error) {
 	ociLinuxDevices := spec.Spec.Linux.Devices
 
 	if ociLinuxDevices == nil {
-		return []config.DeviceInfo{}, nil
+		return []vc.DeviceInfo{}, nil
 	}
 
-	var devices []config.DeviceInfo
+	var devices []vc.DeviceInfo
 	for _, d := range ociLinuxDevices {
 		linuxDeviceInfo, err := newLinuxDeviceInfo(d)
 		if err != nil {
-			return []config.DeviceInfo{}, err
+			return []vc.DeviceInfo{}, err
 		}
 
 		devices = append(devices, *linuxDeviceInfo)
@@ -416,7 +419,6 @@ func (spec *CompatOCISpec) ContainerType() (vc.ContainerType, error) {
 	return vc.PodSandbox, nil
 }
 
-// SandboxID determines the sandbox ID related to an OCI configuration. This function
 func getPodIdByPid(pid int) (string, error) {
 	// concrete virtcontainer implementation
 	var virtcontainersImpl = &vc.VCImpl{}
@@ -441,16 +443,14 @@ func getPodIdByPid(pid int) (string, error) {
 }
 
 // PodID determines the pod ID related to an OCI configuration. This function
-
 // is expected to be called only when the container type is "PodContainer".
-func (spec *CompatOCISpec) SandboxID() (string, error) {
+func (spec *CompatOCISpec) PodID() (string, error) {
 	for _, key := range CRISandboxNameKeyList {
-		sandboxID, ok := spec.Annotations[key]
+		podID, ok := spec.Annotations[key]
 		if ok {
-			return sandboxID, nil
+			return podID, nil
 		}
 	}
-
 
 	var nsPath string
 	for _, ns := range spec.Linux.Namespaces {
@@ -492,7 +492,7 @@ func vmConfig(ocispec CompatOCISpec, config RuntimeConfig) (vc.Resources, error)
 	return resources, nil
 }
 
-func addAssetAnnotations(ocispec CompatOCISpec, config *vc.SandboxConfig) {
+func addAssetAnnotations(ocispec CompatOCISpec, config *vc.PodConfig) {
 	assetAnnotations := []string{
 		vcAnnotations.KernelPath,
 		vcAnnotations.ImagePath,
@@ -512,30 +512,30 @@ func addAssetAnnotations(ocispec CompatOCISpec, config *vc.SandboxConfig) {
 	}
 }
 
-// SandboxConfig converts an OCI compatible runtime configuration file
-// to a virtcontainers sandbox configuration structure.
-func SandboxConfig(ocispec CompatOCISpec, runtime RuntimeConfig, bundlePath, cid, console string, detach bool) (vc.SandboxConfig, error) {
+// PodConfig converts an OCI compatible runtime configuration file
+// to a virtcontainers pod configuration structure.
+func PodConfig(ocispec CompatOCISpec, runtime RuntimeConfig, bundlePath, cid, console string, detach bool) (vc.PodConfig, error) {
 	containerConfig, err := ContainerConfig(ocispec, bundlePath, cid, console, detach)
 	if err != nil {
-		return vc.SandboxConfig{}, err
+		return vc.PodConfig{}, err
 	}
 
 	networkConfig, err := networkConfig(ocispec, runtime)
 	if err != nil {
-		return vc.SandboxConfig{}, err
+		return vc.PodConfig{}, err
 	}
 
 	resources, err := vmConfig(ocispec, runtime)
 	if err != nil {
-		return vc.SandboxConfig{}, err
+		return vc.PodConfig{}, err
 	}
 
 	ociSpecJSON, err := json.Marshal(ocispec)
 	if err != nil {
-		return vc.SandboxConfig{}, err
+		return vc.PodConfig{}, err
 	}
 
-	sandboxConfig := vc.SandboxConfig{
+	podConfig := vc.PodConfig{
 		ID: cid,
 
 		Hostname: ocispec.Hostname,
@@ -567,9 +567,9 @@ func SandboxConfig(ocispec CompatOCISpec, runtime RuntimeConfig, bundlePath, cid
 		},
 	}
 
-	addAssetAnnotations(ocispec, &sandboxConfig)
+	addAssetAnnotations(ocispec, &podConfig)
 
-	return sandboxConfig, nil
+	return podConfig, nil
 }
 
 // ContainerConfig converts an OCI compatible runtime configuration
@@ -618,7 +618,11 @@ func ContainerConfig(ocispec CompatOCISpec, bundlePath, cid, console string, det
 	if ocispec.Linux.Resources.CPU != nil {
 		if ocispec.Linux.Resources.CPU.Quota != nil &&
 			ocispec.Linux.Resources.CPU.Period != nil {
-			resources.VCPUs = uint32(utils.ConstraintsToVCPUs(*ocispec.Linux.Resources.CPU.Quota, *ocispec.Linux.Resources.CPU.Period))
+			resources.CPUQuota = *ocispec.Linux.Resources.CPU.Quota
+			resources.CPUPeriod = *ocispec.Linux.Resources.CPU.Period
+		}
+		if ocispec.Linux.Resources.CPU.Shares != nil {
+			resources.CPUShares = *ocispec.Linux.Resources.CPU.Shares
 		}
 	}
 
@@ -667,8 +671,6 @@ func StateToOCIState(state vc.State) string {
 		return StateRunning
 	case vc.StateStopped:
 		return StateStopped
-	case vc.StatePaused:
-		return StatePaused
 	default:
 		return ""
 	}
@@ -695,6 +697,10 @@ func EnvVars(envs []string) ([]vc.EnvVar, error) {
 		}
 
 		envSlice[1] = strings.Trim(envSlice[1], "' ")
+
+		if envSlice[1] == "" {
+			return []vc.EnvVar{}, fmt.Errorf("Environment value cannot be empty")
+		}
 
 		envVar := vc.EnvVar{
 			Var:   envSlice[0],

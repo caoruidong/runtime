@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package annotations
@@ -8,34 +19,34 @@ package annotations
 const (
 	vcAnnotationsPrefix = "com.github.containers.virtcontainers."
 
-	// KernelPath is a sandbox annotation for passing a per container path pointing at the kernel needed to boot the container VM.
+	// KernelPath is a pod annotation for passing a per container path pointing at the kernel needed to boot the container VM.
 	KernelPath = vcAnnotationsPrefix + "KernelPath"
 
-	// ImagePath is a sandbox annotation for passing a per container path pointing at the guest image that will run in the container VM.
+	// ImagePath is a pod annotation for passing a per container path pointing at the guest image that will run in the container VM.
 	ImagePath = vcAnnotationsPrefix + "ImagePath"
 
-	// InitrdPath is a sandbox annotation for passing a per container path pointing at the guest initrd image that will run in the container VM.
+	// InitrdPath is a pod annotation for passing a per container path pointing at the guest initrd image that will run in the container VM.
 	InitrdPath = vcAnnotationsPrefix + "InitrdPath"
 
-	// HypervisorPath is a sandbox annotation for passing a per container path pointing at the hypervisor that will run the container VM.
+	// HypervisorPath is a pod annotation for passing a per container path pointing at the hypervisor that will run the container VM.
 	HypervisorPath = vcAnnotationsPrefix + "HypervisorPath"
 
-	// FirmwarePath is a sandbox annotation for passing a per container path pointing at the guest firmware that will run the container VM.
+	// FirmwarePath is a pod annotation for passing a per container path pointing at the guest firmware that will run the container VM.
 	FirmwarePath = vcAnnotationsPrefix + "FirmwarePath"
 
-	// KernelHash is a sandbox annotation for passing a container kernel image SHA-512 hash value.
+	// KernelHash is a pod annotation for passing a container kernel image SHA-512 hash value.
 	KernelHash = vcAnnotationsPrefix + "KernelHash"
 
-	// ImageHash is an sandbox annotation for passing a container guest image SHA-512 hash value.
+	// ImageHash is an pod annotation for passing a container guest image SHA-512 hash value.
 	ImageHash = vcAnnotationsPrefix + "ImageHash"
 
-	// InitrdHash is an sandbox annotation for passing a container guest initrd SHA-512 hash value.
+	// InitrdHash is an pod annotation for passing a container guest initrd SHA-512 hash value.
 	InitrdHash = vcAnnotationsPrefix + "InitrdHash"
 
-	// HypervisorHash is an sandbox annotation for passing a container hypervisor binary SHA-512 hash value.
+	// HypervisorHash is an pod annotation for passing a container hypervisor binary SHA-512 hash value.
 	HypervisorHash = vcAnnotationsPrefix + "HypervisorHash"
 
-	// FirmwareHash is an sandbox annotation for passing a container guest firmware SHA-512 hash value.
+	// FirmwareHash is an pod annotation for passing a container guest firmware SHA-512 hash value.
 	FirmwareHash = vcAnnotationsPrefix + "FirmwareHash"
 
 	// AssetHashType is the hash type used for assets verification

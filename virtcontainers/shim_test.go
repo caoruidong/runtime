@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -78,11 +89,6 @@ func TestStringFromNoopShimType(t *testing.T) {
 	testStringFromShimType(t, shimType, "noopShim")
 }
 
-func TestStringFromKataBuiltInShimType(t *testing.T) {
-	shimType := KataBuiltInShimType
-	testStringFromShimType(t, shimType, "kataBuiltInShim")
-}
-
 func TestStringFromUnknownShimType(t *testing.T) {
 	var shimType ShimType
 	testStringFromShimType(t, shimType, "")
@@ -117,12 +123,6 @@ func TestNewShimFromNoopShimType(t *testing.T) {
 	testNewShimFromShimType(t, shimType, expectedShim)
 }
 
-func TestNewShimFromKataBuiltInShimType(t *testing.T) {
-	shimType := KataBuiltInShimType
-	expectedShim := &kataBuiltInShim{}
-	testNewShimFromShimType(t, shimType, expectedShim)
-}
-
 func TestNewShimFromUnknownShimType(t *testing.T) {
 	var shimType ShimType
 
@@ -132,60 +132,52 @@ func TestNewShimFromUnknownShimType(t *testing.T) {
 	}
 }
 
-func testNewShimConfigFromSandboxConfig(t *testing.T, sandboxConfig SandboxConfig, expected interface{}) {
-	result := newShimConfig(sandboxConfig)
+func testNewShimConfigFromPodConfig(t *testing.T, podConfig PodConfig, expected interface{}) {
+	result := newShimConfig(podConfig)
 
 	if reflect.DeepEqual(result, expected) == false {
 		t.Fatalf("Got %+v\nExpecting %+v", result, expected)
 	}
 }
 
-func TestNewShimConfigFromCCShimSandboxConfig(t *testing.T) {
+func TestNewShimConfigFromCCShimPodConfig(t *testing.T) {
 	shimConfig := ShimConfig{}
 
-	sandboxConfig := SandboxConfig{
+	podConfig := PodConfig{
 		ShimType:   CCShimType,
 		ShimConfig: shimConfig,
 	}
 
-	testNewShimConfigFromSandboxConfig(t, sandboxConfig, shimConfig)
+	testNewShimConfigFromPodConfig(t, podConfig, shimConfig)
 }
 
-func TestNewShimConfigFromKataShimSandboxConfig(t *testing.T) {
+func TestNewShimConfigFromKataShimPodConfig(t *testing.T) {
 	shimConfig := ShimConfig{}
 
-	sandboxConfig := SandboxConfig{
+	podConfig := PodConfig{
 		ShimType:   KataShimType,
 		ShimConfig: shimConfig,
 	}
 
-	testNewShimConfigFromSandboxConfig(t, sandboxConfig, shimConfig)
+	testNewShimConfigFromPodConfig(t, podConfig, shimConfig)
 }
 
-func TestNewShimConfigFromNoopShimSandboxConfig(t *testing.T) {
-	sandboxConfig := SandboxConfig{
+func TestNewShimConfigFromNoopShimPodConfig(t *testing.T) {
+	podConfig := PodConfig{
 		ShimType: NoopShimType,
 	}
 
-	testNewShimConfigFromSandboxConfig(t, sandboxConfig, nil)
+	testNewShimConfigFromPodConfig(t, podConfig, nil)
 }
 
-func TestNewShimConfigFromKataBuiltInShimSandboxConfig(t *testing.T) {
-	sandboxConfig := SandboxConfig{
-		ShimType: KataBuiltInShimType,
-	}
-
-	testNewShimConfigFromSandboxConfig(t, sandboxConfig, nil)
-}
-
-func TestNewShimConfigFromUnknownShimSandboxConfig(t *testing.T) {
+func TestNewShimConfigFromUnknownShimPodConfig(t *testing.T) {
 	var shimType ShimType
 
-	sandboxConfig := SandboxConfig{
+	podConfig := PodConfig{
 		ShimType: shimType,
 	}
 
-	testNewShimConfigFromSandboxConfig(t, sandboxConfig, nil)
+	testNewShimConfigFromPodConfig(t, podConfig, nil)
 }
 
 func testRunSleep0AndGetPid(t *testing.T) int {

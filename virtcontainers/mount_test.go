@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -8,6 +19,7 @@ package virtcontainers
 import (
 	"bytes"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,72 +28,6 @@ import (
 	"syscall"
 	"testing"
 )
-
-func TestIsSystemMount(t *testing.T) {
-	tests := []struct {
-		mnt      string
-		expected bool
-	}{
-		{"/sys", true},
-		{"/sys/", true},
-		{"/sys//", true},
-		{"/sys/fs", true},
-		{"/sys/fs/", true},
-		{"/sys/fs/cgroup", true},
-		{"/sysfoo", false},
-		{"/home", false},
-		{"/dev/block/", false},
-		{"/mnt/dev/foo", false},
-	}
-
-	for _, test := range tests {
-		result := isSystemMount(test.mnt)
-		if result != test.expected {
-			t.Fatalf("Expected result for path %s : %v, got %v", test.mnt, test.expected, result)
-		}
-	}
-}
-
-func TestIsHostDevice(t *testing.T) {
-	tests := []struct {
-		mnt      string
-		expected bool
-	}{
-		{"/dev", true},
-		{"/dev/zero", true},
-		{"/dev/block", true},
-		{"/mnt/dev/block", false},
-	}
-
-	for _, test := range tests {
-		result := isHostDevice(test.mnt)
-		if result != test.expected {
-			t.Fatalf("Expected result for path %s : %v, got %v", test.mnt, test.expected, result)
-		}
-	}
-}
-
-func TestIsHostDeviceCreateFile(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip(testDisabledAsNonRoot)
-	}
-	// Create regular file in /dev
-
-	path := "/dev/foobar"
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
-
-	if isHostDevice(path) != false {
-		t.Fatalf("Expected result for path %s : %v, got %v", path, false, true)
-	}
-
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestMajorMinorNumber(t *testing.T) {
 	devices := []string{"/dev/zero", "/dev/net/tun"}
@@ -279,5 +225,86 @@ func TestIsDeviceMapper(t *testing.T) {
 
 	if !isDM {
 		t.Fatal()
+	}
+}
+
+func TestGetVirtDriveNameInvalidIndex(t *testing.T) {
+	_, err := getVirtDriveName(-1)
+
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetVirtDriveName(t *testing.T) {
+	tests := []struct {
+		index         int
+		expectedDrive string
+	}{
+		{0, "vda"},
+		{25, "vdz"},
+		{27, "vdab"},
+		{704, "vdaac"},
+		{18277, "vdzzz"},
+	}
+
+	for _, test := range tests {
+		driveName, err := getVirtDriveName(test.index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if driveName != test.expectedDrive {
+			t.Fatalf("Incorrect drive Name: Got: %s, Expecting :%s", driveName, test.expectedDrive)
+
+		}
+	}
+}
+
+func TestGetSCSIIdLun(t *testing.T) {
+	tests := []struct {
+		index          int
+		expectedScsiID int
+		expectedLun    int
+	}{
+		{0, 0, 0},
+		{1, 0, 1},
+		{2, 0, 2},
+		{255, 0, 255},
+		{256, 1, 0},
+		{257, 1, 1},
+		{258, 1, 2},
+		{512, 2, 0},
+		{513, 2, 1},
+	}
+
+	for _, test := range tests {
+		scsiID, lun, err := getSCSIIdLun(test.index)
+		assert.Nil(t, err)
+
+		if scsiID != test.expectedScsiID && lun != test.expectedLun {
+			t.Fatalf("Expecting scsi-id:lun %d:%d,  Got %d:%d", test.expectedScsiID, test.expectedLun, scsiID, lun)
+		}
+	}
+
+	_, _, err := getSCSIIdLun(maxSCSIDevices + 1)
+	assert.NotNil(t, err)
+}
+
+func TestGetSCSIAddress(t *testing.T) {
+	tests := []struct {
+		index               int
+		expectedSCSIAddress string
+	}{
+		{0, "0:0"},
+		{200, "0:200"},
+		{255, "0:255"},
+		{258, "1:2"},
+		{512, "2:0"},
+	}
+
+	for _, test := range tests {
+		scsiAddr, err := getSCSIAddress(test.index)
+		assert.Nil(t, err)
+		assert.Equal(t, scsiAddr, test.expectedSCSIAddress)
 	}
 }

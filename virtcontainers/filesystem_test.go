@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -12,8 +23,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/kata-containers/runtime/virtcontainers/device/manager"
 )
 
 func TestFilesystemCreateAllResourcesSuccessful(t *testing.T) {
@@ -25,53 +34,52 @@ func TestFilesystemCreateAllResourcesSuccessful(t *testing.T) {
 		{ID: "100"},
 	}
 
-	sandboxConfig := &SandboxConfig{
+	podConfig := &PodConfig{
 		Containers: contConfigs,
 	}
 
-	sandbox := &Sandbox{
-		id:         testSandboxID,
-		storage:    fs,
-		config:     sandboxConfig,
-		devManager: manager.NewDeviceManager(manager.VirtioBlock),
+	pod := Pod{
+		id:      testPodID,
+		storage: fs,
+		config:  podConfig,
 	}
 
-	if err := sandbox.newContainers(); err != nil {
+	if err := pod.newContainers(); err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxConfigPath := filepath.Join(configStoragePath, testSandboxID)
-	sandboxRunPath := filepath.Join(runStoragePath, testSandboxID)
+	podConfigPath := filepath.Join(configStoragePath, testPodID)
+	podRunPath := filepath.Join(runStoragePath, testPodID)
 
-	os.RemoveAll(sandboxConfigPath)
-	os.RemoveAll(sandboxRunPath)
+	os.RemoveAll(podConfigPath)
+	os.RemoveAll(podRunPath)
 
 	for _, container := range contConfigs {
-		configPath := filepath.Join(configStoragePath, testSandboxID, container.ID)
+		configPath := filepath.Join(configStoragePath, testPodID, container.ID)
 		os.RemoveAll(configPath)
 
-		runPath := filepath.Join(runStoragePath, testSandboxID, container.ID)
+		runPath := filepath.Join(runStoragePath, testPodID, container.ID)
 		os.RemoveAll(runPath)
 	}
 
-	err := fs.createAllResources(sandbox)
+	err := fs.createAllResources(pod)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check resources
-	_, err = os.Stat(sandboxConfigPath)
+	_, err = os.Stat(podConfigPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = os.Stat(sandboxRunPath)
+	_, err = os.Stat(podRunPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, container := range contConfigs {
-		configPath := filepath.Join(configStoragePath, testSandboxID, container.ID)
+		configPath := filepath.Join(configStoragePath, testPodID, container.ID)
 		s, err := os.Stat(configPath)
 		if err != nil {
 			t.Fatal(err)
@@ -82,7 +90,7 @@ func TestFilesystemCreateAllResourcesSuccessful(t *testing.T) {
 			t.Fatal(fmt.Errorf("dirmode [%v] != expected [%v]", s.Mode(), dirMode))
 		}
 
-		runPath := filepath.Join(runStoragePath, testSandboxID, container.ID)
+		runPath := filepath.Join(runStoragePath, testPodID, container.ID)
 		s, err = os.Stat(runPath)
 		if err != nil {
 			t.Fatal(err)
@@ -96,12 +104,12 @@ func TestFilesystemCreateAllResourcesSuccessful(t *testing.T) {
 	}
 }
 
-func TestFilesystemCreateAllResourcesFailingSandboxIDEmpty(t *testing.T) {
+func TestFilesystemCreateAllResourcesFailingPodIDEmpty(t *testing.T) {
 	fs := &filesystem{}
 
-	sandbox := &Sandbox{}
+	pod := Pod{}
 
-	err := fs.createAllResources(sandbox)
+	err := fs.createAllResources(pod)
 	if err == nil {
 		t.Fatal()
 	}
@@ -114,12 +122,12 @@ func TestFilesystemCreateAllResourcesFailingContainerIDEmpty(t *testing.T) {
 		{id: ""},
 	}
 
-	sandbox := &Sandbox{
-		id:         testSandboxID,
+	pod := Pod{
+		id:         testPodID,
 		containers: containers,
 	}
 
-	err := fs.createAllResources(sandbox)
+	err := fs.createAllResources(pod)
 	if err == nil {
 		t.Fatal()
 	}
@@ -226,7 +234,7 @@ func TestFilesystemFetchFileSuccessful(t *testing.T) {
 	}
 	f.Close()
 
-	err = fs.fetchFile(path, sandboxResource(-1), &data)
+	err = fs.fetchFile(path, podResource(-1), &data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +256,7 @@ func TestFilesystemFetchFileFailingNoFile(t *testing.T) {
 	path := filepath.Join(testDir, "testFilesystem")
 	os.Remove(path)
 
-	err := fs.fetchFile(path, sandboxResource(-1), &data)
+	err := fs.fetchFile(path, podResource(-1), &data)
 	if err == nil {
 		t.Fatal()
 	}
@@ -267,7 +275,7 @@ func TestFilesystemFetchFileFailingUnMarshalling(t *testing.T) {
 	}
 	f.Close()
 
-	err = fs.fetchFile(path, sandboxResource(-1), data)
+	err = fs.fetchFile(path, podResource(-1), data)
 	if err == nil {
 		t.Fatal()
 	}
@@ -278,7 +286,7 @@ func TestFilesystemFetchContainerConfigSuccessful(t *testing.T) {
 	contID := "100"
 	rootFs := "rootfs"
 
-	contConfigDir := filepath.Join(configStoragePath, testSandboxID, contID)
+	contConfigDir := filepath.Join(configStoragePath, testPodID, contID)
 	os.MkdirAll(contConfigDir, dirMode)
 
 	path := filepath.Join(contConfigDir, configFile)
@@ -297,7 +305,7 @@ func TestFilesystemFetchContainerConfigSuccessful(t *testing.T) {
 	}
 	f.Close()
 
-	data, err := fs.fetchContainerConfig(testSandboxID, contID)
+	data, err := fs.fetchContainerConfig(testPodID, contID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,13 +323,13 @@ func TestFilesystemFetchContainerConfigSuccessful(t *testing.T) {
 func TestFilesystemFetchContainerConfigFailingContIDEmpty(t *testing.T) {
 	fs := &filesystem{}
 
-	_, err := fs.fetchContainerConfig(testSandboxID, "")
+	_, err := fs.fetchContainerConfig(testPodID, "")
 	if err == nil {
 		t.Fatal()
 	}
 }
 
-func TestFilesystemFetchContainerConfigFailingSandboxIDEmpty(t *testing.T) {
+func TestFilesystemFetchContainerConfigFailingPodIDEmpty(t *testing.T) {
 	fs := &filesystem{}
 
 	_, err := fs.fetchContainerConfig("", "100")
@@ -334,7 +342,7 @@ func TestFilesystemFetchContainerMountsSuccessful(t *testing.T) {
 	fs := &filesystem{}
 	contID := "100"
 
-	contMountsDir := filepath.Join(runStoragePath, testSandboxID, contID)
+	contMountsDir := filepath.Join(runStoragePath, testPodID, contID)
 	os.MkdirAll(contMountsDir, dirMode)
 
 	path := filepath.Join(contMountsDir, mountsFile)
@@ -370,7 +378,7 @@ func TestFilesystemFetchContainerMountsSuccessful(t *testing.T) {
 	}
 	f.Close()
 
-	data, err := fs.fetchContainerMounts(testSandboxID, contID)
+	data, err := fs.fetchContainerMounts(testPodID, contID)
 	if err != nil {
 		data, _ := ioutil.ReadFile(path)
 		t.Logf("Data from file : %s", string(data[:]))
@@ -396,7 +404,7 @@ func TestFilesystemFetchContainerMountsInvalidType(t *testing.T) {
 	fs := &filesystem{}
 	contID := "100"
 
-	contMountsDir := filepath.Join(runStoragePath, testSandboxID, contID)
+	contMountsDir := filepath.Join(runStoragePath, testPodID, contID)
 	os.MkdirAll(contMountsDir, dirMode)
 
 	path := filepath.Join(contMountsDir, mountsFile)
@@ -415,7 +423,7 @@ func TestFilesystemFetchContainerMountsInvalidType(t *testing.T) {
 	}
 	f.Close()
 
-	_, err = fs.fetchContainerMounts(testSandboxID, contID)
+	_, err = fs.fetchContainerMounts(testPodID, contID)
 	if err == nil {
 		t.Fatal()
 	}
@@ -424,13 +432,13 @@ func TestFilesystemFetchContainerMountsInvalidType(t *testing.T) {
 func TestFilesystemFetchContainerMountsFailingContIDEmpty(t *testing.T) {
 	fs := &filesystem{}
 
-	_, err := fs.fetchContainerMounts(testSandboxID, "")
+	_, err := fs.fetchContainerMounts(testPodID, "")
 	if err == nil {
 		t.Fatal()
 	}
 }
 
-func TestFilesystemFetchContainerMountsFailingSandboxIDEmpty(t *testing.T) {
+func TestFilesystemFetchContainerMountsFailingPodIDEmpty(t *testing.T) {
 	fs := &filesystem{}
 
 	_, err := fs.fetchContainerMounts("", "100")
@@ -439,7 +447,7 @@ func TestFilesystemFetchContainerMountsFailingSandboxIDEmpty(t *testing.T) {
 	}
 }
 
-func TestFilesystemResourceDirFailingSandboxIDEmpty(t *testing.T) {
+func TestFilesystemResourceDirFailingPodIDEmpty(t *testing.T) {
 	for _, b := range []bool{true, false} {
 		_, err := resourceDir(b, "", "", configFileType)
 		if err == nil {
@@ -450,7 +458,7 @@ func TestFilesystemResourceDirFailingSandboxIDEmpty(t *testing.T) {
 
 func TestFilesystemResourceDirFailingInvalidResource(t *testing.T) {
 	for _, b := range []bool{true, false} {
-		_, err := resourceDir(b, testSandboxID, "100", sandboxResource(-1))
+		_, err := resourceDir(b, testPodID, "100", podResource(-1))
 		if err == nil {
 			t.Fatal()
 		}
@@ -461,19 +469,19 @@ func TestFilesystemResourceURIFailingResourceDir(t *testing.T) {
 	fs := &filesystem{}
 
 	for _, b := range []bool{true, false} {
-		_, _, err := fs.resourceURI(b, testSandboxID, "100", sandboxResource(-1))
+		_, _, err := fs.resourceURI(b, testPodID, "100", podResource(-1))
 		if err == nil {
 			t.Fatal()
 		}
 	}
 }
 
-func TestFilesystemStoreResourceFailingSandboxConfigStateFileType(t *testing.T) {
+func TestFilesystemStoreResourceFailingPodConfigStateFileType(t *testing.T) {
 	fs := &filesystem{}
-	data := SandboxConfig{}
+	data := PodConfig{}
 
 	for _, b := range []bool{true, false} {
-		err := fs.storeResource(b, testSandboxID, "100", stateFileType, data)
+		err := fs.storeResource(b, testPodID, "100", stateFileType, data)
 		if err == nil {
 			t.Fatal()
 		}
@@ -485,16 +493,16 @@ func TestFilesystemStoreResourceFailingContainerConfigStateFileType(t *testing.T
 	data := ContainerConfig{}
 
 	for _, b := range []bool{true, false} {
-		err := fs.storeResource(b, testSandboxID, "100", stateFileType, data)
+		err := fs.storeResource(b, testPodID, "100", stateFileType, data)
 		if err == nil {
 			t.Fatal()
 		}
 	}
 }
 
-func TestFilesystemStoreResourceFailingSandboxConfigResourceURI(t *testing.T) {
+func TestFilesystemStoreResourceFailingPodConfigResourceURI(t *testing.T) {
 	fs := &filesystem{}
-	data := SandboxConfig{}
+	data := PodConfig{}
 
 	for _, b := range []bool{true, false} {
 		err := fs.storeResource(b, "", "100", configFileType, data)
@@ -521,7 +529,7 @@ func TestFilesystemStoreResourceFailingStateConfigFileType(t *testing.T) {
 	data := State{}
 
 	for _, b := range []bool{true, false} {
-		err := fs.storeResource(b, testSandboxID, "100", configFileType, data)
+		err := fs.storeResource(b, testPodID, "100", configFileType, data)
 		if err == nil {
 			t.Fatal()
 		}
@@ -545,7 +553,7 @@ func TestFilesystemStoreResourceFailingWrongDataType(t *testing.T) {
 	data := TestNoopStructure{}
 
 	for _, b := range []bool{true, false} {
-		err := fs.storeResource(b, testSandboxID, "100", configFileType, data)
+		err := fs.storeResource(b, testPodID, "100", configFileType, data)
 		if err == nil {
 			t.Fatal()
 		}
@@ -556,7 +564,7 @@ func TestFilesystemFetchResourceFailingWrongResourceType(t *testing.T) {
 	fs := &filesystem{}
 
 	for _, b := range []bool{true, false} {
-		if err := fs.fetchResource(b, testSandboxID, "100", lockFileType, nil); err == nil {
+		if err := fs.fetchResource(b, testPodID, "100", lockFileType, nil); err == nil {
 			t.Fatal()
 		}
 	}

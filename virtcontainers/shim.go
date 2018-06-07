@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -29,9 +40,6 @@ const (
 
 	// KataShimType is the Kata Containers shim type.
 	KataShimType ShimType = "kataShim"
-
-	// KataBuiltInShimType is the Kata Containers builtin shim type.
-	KataBuiltInShimType ShimType = "kataBuiltInShim"
 )
 
 var waitForShimTimeout = 10.0
@@ -63,16 +71,16 @@ func (pType *ShimType) Set(value string) error {
 	switch value {
 	case "noopShim":
 		*pType = NoopShimType
+		return nil
 	case "ccShim":
 		*pType = CCShimType
+		return nil
 	case "kataShim":
 		*pType = KataShimType
-	case "kataBuiltInShim":
-		*pType = KataBuiltInShimType
+		return nil
 	default:
 		return fmt.Errorf("Unknown shim type %s", value)
 	}
-	return nil
 }
 
 // String converts a shim type to a string.
@@ -84,8 +92,6 @@ func (pType *ShimType) String() string {
 		return string(CCShimType)
 	case KataShimType:
 		return string(KataShimType)
-	case KataBuiltInShimType:
-		return string(KataBuiltInShimType)
 	default:
 		return ""
 	}
@@ -100,17 +106,15 @@ func newShim(pType ShimType) (shim, error) {
 		return &ccShim{}, nil
 	case KataShimType:
 		return &kataShim{}, nil
-	case KataBuiltInShimType:
-		return &kataBuiltInShim{}, nil
 	default:
 		return &noopShim{}, nil
 	}
 }
 
-// newShimConfig returns a shim config from a generic SandboxConfig interface.
-func newShimConfig(config SandboxConfig) interface{} {
+// newShimConfig returns a shim config from a generic PodConfig interface.
+func newShimConfig(config PodConfig) interface{} {
 	switch config.ShimType {
-	case NoopShimType, KataBuiltInShimType:
+	case NoopShimType:
 		return nil
 	case CCShimType, KataShimType:
 		var shimConfig ShimConfig
@@ -143,10 +147,6 @@ func signalShim(pid int, sig syscall.Signal) error {
 }
 
 func stopShim(pid int) error {
-	if pid <= 0 {
-		return nil
-	}
-
 	if err := signalShim(pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
 		return err
 	}
@@ -154,7 +154,7 @@ func stopShim(pid int) error {
 	return nil
 }
 
-func prepareAndStartShim(sandbox *Sandbox, shim shim, cid, token, url string, cmd Cmd,
+func prepareAndStartShim(pod *Pod, shim shim, cid, token, url string, cmd Cmd,
 	createNSList []ns.NSType, enterNSList []ns.Namespace) (*Process, error) {
 	process := &Process{
 		Token:     token,
@@ -172,7 +172,7 @@ func prepareAndStartShim(sandbox *Sandbox, shim shim, cid, token, url string, cm
 		EnterNS:   enterNSList,
 	}
 
-	pid, err := shim.start(sandbox, shimParams)
+	pid, err := shim.start(*pod, shimParams)
 	if err != nil {
 		return nil, err
 	}
@@ -233,10 +233,6 @@ func startShim(args []string, params ShimParams) (int, error) {
 }
 
 func isShimRunning(pid int) (bool, error) {
-	if pid <= 0 {
-		return false, nil
-	}
-
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return false, err
@@ -282,5 +278,5 @@ func waitForShim(pid int) error {
 type shim interface {
 	// start starts the shim relying on its configuration and on
 	// parameters provided.
-	start(sandbox *Sandbox, params ShimParams) (int, error)
+	start(pod Pod, params ShimParams) (int, error)
 }

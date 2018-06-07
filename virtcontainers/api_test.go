@@ -1,6 +1,17 @@
+//
 // Copyright (c) 2016 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 package virtcontainers
@@ -17,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/kata-containers/runtime/virtcontainers/pkg/mock"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,9 +35,9 @@ const (
 	containerID = "1"
 )
 
-var sandboxAnnotations = map[string]string{
-	"sandbox.foo":   "sandbox.bar",
-	"sandbox.hello": "sandbox.world",
+var podAnnotations = map[string]string{
+	"pod.foo":   "pod.bar",
+	"pod.hello": "pod.world",
 }
 
 var containerAnnotations = map[string]string{
@@ -52,7 +62,7 @@ func newBasicTestCmd() Cmd {
 	return cmd
 }
 
-func newTestSandboxConfigNoop() SandboxConfig {
+func newTestPodConfigNoop() PodConfig {
 	// Define the container command and bundle.
 	container := ContainerConfig{
 		ID:          containerID,
@@ -68,8 +78,8 @@ func newTestSandboxConfigNoop() SandboxConfig {
 		HypervisorPath: filepath.Join(testDir, testHypervisor),
 	}
 
-	sandboxConfig := SandboxConfig{
-		ID:               testSandboxID,
+	podConfig := PodConfig{
+		ID:               testPodID,
 		HypervisorType:   MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 
@@ -77,13 +87,13 @@ func newTestSandboxConfigNoop() SandboxConfig {
 
 		Containers: []ContainerConfig{container},
 
-		Annotations: sandboxAnnotations,
+		Annotations: podAnnotations,
 	}
 
-	return sandboxConfig
+	return podConfig
 }
 
-func newTestSandboxConfigHyperstartAgent() SandboxConfig {
+func newTestPodConfigHyperstartAgent() PodConfig {
 	// Define the container command and bundle.
 	container := ContainerConfig{
 		ID:          containerID,
@@ -104,8 +114,8 @@ func newTestSandboxConfigHyperstartAgent() SandboxConfig {
 		SockTtyName: testHyperstartTtySocket,
 	}
 
-	sandboxConfig := SandboxConfig{
-		ID:               testSandboxID,
+	podConfig := PodConfig{
+		ID:               testPodID,
 		HypervisorType:   MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 
@@ -113,13 +123,13 @@ func newTestSandboxConfigHyperstartAgent() SandboxConfig {
 		AgentConfig: agentConfig,
 
 		Containers:  []ContainerConfig{container},
-		Annotations: sandboxAnnotations,
+		Annotations: podAnnotations,
 	}
 
-	return sandboxConfig
+	return podConfig
 }
 
-func newTestSandboxConfigHyperstartAgentCNINetwork() SandboxConfig {
+func newTestPodConfigHyperstartAgentCNINetwork() PodConfig {
 	// Define the container command and bundle.
 	container := ContainerConfig{
 		ID:          containerID,
@@ -144,8 +154,8 @@ func newTestSandboxConfigHyperstartAgentCNINetwork() SandboxConfig {
 		NumInterfaces: 1,
 	}
 
-	sandboxConfig := SandboxConfig{
-		ID:               testSandboxID,
+	podConfig := PodConfig{
+		ID:               testPodID,
 		HypervisorType:   MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 
@@ -156,13 +166,13 @@ func newTestSandboxConfigHyperstartAgentCNINetwork() SandboxConfig {
 		NetworkConfig: netConfig,
 
 		Containers:  []ContainerConfig{container},
-		Annotations: sandboxAnnotations,
+		Annotations: podAnnotations,
 	}
 
-	return sandboxConfig
+	return podConfig
 }
 
-func newTestSandboxConfigHyperstartAgentCNMNetwork() SandboxConfig {
+func newTestPodConfigHyperstartAgentCNMNetwork() PodConfig {
 	// Define the container command and bundle.
 	container := ContainerConfig{
 		ID:          containerID,
@@ -198,8 +208,8 @@ func newTestSandboxConfigHyperstartAgentCNMNetwork() SandboxConfig {
 		NumInterfaces: len(hooks.PreStartHooks),
 	}
 
-	sandboxConfig := SandboxConfig{
-		ID:    testSandboxID,
+	podConfig := PodConfig{
+		ID:    testPodID,
 		Hooks: hooks,
 
 		HypervisorType:   MockHypervisor,
@@ -212,13 +222,13 @@ func newTestSandboxConfigHyperstartAgentCNMNetwork() SandboxConfig {
 		NetworkConfig: netConfig,
 
 		Containers:  []ContainerConfig{container},
-		Annotations: sandboxAnnotations,
+		Annotations: podAnnotations,
 	}
 
-	return sandboxConfig
+	return podConfig
 }
 
-func newTestSandboxConfigKataAgent() SandboxConfig {
+func newTestPodConfigKataAgent() PodConfig {
 	// Sets the hypervisor configuration.
 	hypervisorConfig := HypervisorConfig{
 		KernelPath:     filepath.Join(testDir, testKernel),
@@ -226,31 +236,31 @@ func newTestSandboxConfigKataAgent() SandboxConfig {
 		HypervisorPath: filepath.Join(testDir, testHypervisor),
 	}
 
-	sandboxConfig := SandboxConfig{
-		ID:               testSandboxID,
+	podConfig := PodConfig{
+		ID:               testPodID,
 		HypervisorType:   MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 
 		AgentType: KataContainersAgent,
 
-		Annotations: sandboxAnnotations,
+		Annotations: podAnnotations,
 	}
 
-	return sandboxConfig
+	return podConfig
 }
 
-func TestCreateSandboxNoopAgentSuccessful(t *testing.T) {
+func TestCreatePodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,14 +278,14 @@ func testGenerateCCProxySockDir() (string, error) {
 	return dir, nil
 }
 
-func TestCreateSandboxHyperstartAgentSuccessful(t *testing.T) {
+func TestCreatePodHyperstartAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -289,26 +299,26 @@ func TestCreateSandboxHyperstartAgentSuccessful(t *testing.T) {
 	proxy.Start()
 	defer proxy.Stop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCreateSandboxKataAgentSuccessful(t *testing.T) {
+func TestCreatePodKataAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigKataAgent()
+	config := newTestPodConfigKataAgent()
 
 	sockDir, err := testGenerateKataProxySockDir()
 	if err != nil {
@@ -330,64 +340,64 @@ func TestCreateSandboxKataAgentSuccessful(t *testing.T) {
 	}
 	defer kataProxyMock.Stop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCreateSandboxFailing(t *testing.T) {
+func TestCreatePodFailing(t *testing.T) {
 	cleanUp()
 
-	config := SandboxConfig{}
+	config := PodConfig{}
 
-	p, err := CreateSandbox(config)
-	if p.(*Sandbox) != nil || err == nil {
+	p, err := CreatePod(config)
+	if p.(*Pod) != nil || err == nil {
 		t.Fatal()
 	}
 }
 
-func TestDeleteSandboxNoopAgentSuccessful(t *testing.T) {
+func TestDeletePodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = DeleteSandbox(p.ID())
+	p, err = DeletePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = os.Stat(sandboxDir)
+	_, err = os.Stat(podDir)
 	if err == nil {
 		t.Fatal()
 	}
 }
 
-func TestDeleteSandboxHyperstartAgentSuccessful(t *testing.T) {
+func TestDeletePodHyperstartAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -401,36 +411,36 @@ func TestDeleteSandboxHyperstartAgentSuccessful(t *testing.T) {
 	proxy.Start()
 	defer proxy.Stop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = DeleteSandbox(p.ID())
+	p, err = DeletePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = os.Stat(sandboxDir)
+	_, err = os.Stat(podDir)
 	if err == nil {
 		t.Fatal(err)
 	}
 }
 
-func TestDeleteSandboxKataAgentSuccessful(t *testing.T) {
+func TestDeletePodKataAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigKataAgent()
+	config := newTestPodConfigKataAgent()
 
 	sockDir, err := testGenerateKataProxySockDir()
 	if err != nil {
@@ -452,59 +462,59 @@ func TestDeleteSandboxKataAgentSuccessful(t *testing.T) {
 	}
 	defer kataProxyMock.Stop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = DeleteSandbox(p.ID())
+	p, err = DeletePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = os.Stat(sandboxDir)
+	_, err = os.Stat(podDir)
 	if err == nil {
 		t.Fatal(err)
 	}
 }
 
-func TestDeleteSandboxFailing(t *testing.T) {
+func TestDeletePodFailing(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
-	os.Remove(sandboxDir)
+	podDir := filepath.Join(configStoragePath, testPodID)
+	os.Remove(podDir)
 
-	p, err := DeleteSandbox(testSandboxID)
+	p, err := DeletePod(testPodID)
 	if p != nil || err == nil {
 		t.Fatal()
 	}
 }
 
-func TestStartSandboxNoopAgentSuccessful(t *testing.T) {
+func TestStartPodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestStartSandboxHyperstartAgentSuccessful(t *testing.T) {
+func TestStartPodHyperstartAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -521,25 +531,25 @@ func TestStartSandboxHyperstartAgentSuccessful(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestStartSandboxKataAgentSuccessful(t *testing.T) {
+func TestStartPodKataAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigKataAgent()
+	config := newTestPodConfigKataAgent()
 
 	sockDir, err := testGenerateKataProxySockDir()
 	if err != nil {
@@ -561,51 +571,51 @@ func TestStartSandboxKataAgentSuccessful(t *testing.T) {
 	}
 	defer kataProxyMock.Stop()
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestStartSandboxFailing(t *testing.T) {
+func TestStartPodFailing(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
-	os.Remove(sandboxDir)
+	podDir := filepath.Join(configStoragePath, testPodID)
+	os.Remove(podDir)
 
-	p, err := StartSandbox(testSandboxID)
+	p, err := StartPod(testPodID)
 	if p != nil || err == nil {
 		t.Fatal()
 	}
 }
 
-func TestStopSandboxNoopAgentSuccessful(t *testing.T) {
+func TestStopPodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	vp, err := StopSandbox(p.ID())
+	vp, err := StopPod(p.ID())
 	if vp == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestPauseThenResumeSandboxNoopAgentSuccessful(t *testing.T) {
+func TestPauseThenResumePodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -618,17 +628,17 @@ func TestPauseThenResumeSandboxNoopAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err = PauseSandbox(p.ID())
+	p, err = PausePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
 	expectedState := StatePaused
 
-	assert.Equal(t, pImpl.state.State, expectedState, "unexpected paused sandbox state")
+	assert.Equal(t, pImpl.state.State, expectedState, "unexpected paused pod state")
 
 	for i, c := range p.GetAllContainers() {
 		cImpl, ok := c.(*Container)
@@ -638,17 +648,17 @@ func TestPauseThenResumeSandboxNoopAgentSuccessful(t *testing.T) {
 			fmt.Sprintf("paused container %d has unexpected state", i))
 	}
 
-	p, err = ResumeSandbox(p.ID())
+	p, err = ResumePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok = p.(*Sandbox)
+	pImpl, ok = p.(*Pod)
 	assert.True(t, ok)
 
 	expectedState = StateRunning
 
-	assert.Equal(t, pImpl.state.State, expectedState, "unexpected resumed sandbox state")
+	assert.Equal(t, pImpl.state.State, expectedState, "unexpected resumed pod state")
 
 	for i, c := range p.GetAllContainers() {
 		cImpl, ok := c.(*Container)
@@ -659,14 +669,14 @@ func TestPauseThenResumeSandboxNoopAgentSuccessful(t *testing.T) {
 	}
 }
 
-func TestStopSandboxHyperstartAgentSuccessful(t *testing.T) {
+func TestStopPodHyperstartAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -683,25 +693,25 @@ func TestStopSandboxHyperstartAgentSuccessful(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = StopSandbox(p.ID())
+	p, err = StopPod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestStopSandboxKataAgentSuccessful(t *testing.T) {
+func TestStopPodKataAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigKataAgent()
+	config := newTestPodConfigKataAgent()
 
 	sockDir, err := testGenerateKataProxySockDir()
 	if err != nil {
@@ -723,54 +733,54 @@ func TestStopSandboxKataAgentSuccessful(t *testing.T) {
 	}
 	defer kataProxyMock.Stop()
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = StopSandbox(p.ID())
+	p, err = StopPod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestStopSandboxFailing(t *testing.T) {
+func TestStopPodFailing(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
-	os.Remove(sandboxDir)
+	podDir := filepath.Join(configStoragePath, testPodID)
+	os.Remove(podDir)
 
-	p, err := StopSandbox(testSandboxID)
+	p, err := StopPod(testPodID)
 	if p != nil || err == nil {
 		t.Fatal()
 	}
 }
 
-func TestRunSandboxNoopAgentSuccessful(t *testing.T) {
+func TestRunPodNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := RunSandbox(config)
+	p, err := RunPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestRunSandboxHyperstartAgentSuccessful(t *testing.T) {
+func TestRunPodHyperstartAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -787,31 +797,31 @@ func TestRunSandboxHyperstartAgentSuccessful(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, err := RunSandbox(config)
+	p, err := RunPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestRunSandboxKataAgentSuccessful(t *testing.T) {
+func TestRunPodKataAgentSuccessful(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigKataAgent()
+	config := newTestPodConfigKataAgent()
 
 	sockDir, err := testGenerateKataProxySockDir()
 	if err != nil {
@@ -833,67 +843,67 @@ func TestRunSandboxKataAgentSuccessful(t *testing.T) {
 	}
 	defer kataProxyMock.Stop()
 
-	p, err := RunSandbox(config)
+	p, err := RunPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestRunSandboxFailing(t *testing.T) {
+func TestRunPodFailing(t *testing.T) {
 	cleanUp()
 
-	config := SandboxConfig{}
+	config := PodConfig{}
 
-	p, err := RunSandbox(config)
+	p, err := RunPod(config)
 	if p != nil || err == nil {
 		t.Fatal()
 	}
 }
 
-func TestListSandboxSuccessful(t *testing.T) {
+func TestListPodSuccessful(t *testing.T) {
 	cleanUp()
 
 	os.RemoveAll(configStoragePath)
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = ListSandbox()
+	_, err = ListPod()
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestListSandboxNoSandboxDirectory(t *testing.T) {
+func TestListPodNoPodDirectory(t *testing.T) {
 	cleanUp()
 
 	os.RemoveAll(configStoragePath)
 
-	_, err := ListSandbox()
+	_, err := ListPod()
 	if err != nil {
-		t.Fatal(fmt.Sprintf("unexpected ListSandbox error from non-existent sandbox directory: %v", err))
+		t.Fatal(fmt.Sprintf("unexpected ListPod error from non-existent pod directory: %v", err))
 	}
 }
 
-func TestStatusSandboxSuccessfulStateReady(t *testing.T) {
+func TestStatusPodSuccessfulStateReady(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 	hypervisorConfig := HypervisorConfig{
 		KernelPath:        filepath.Join(testDir, testKernel),
 		ImagePath:         filepath.Join(testDir, testImage),
@@ -903,18 +913,17 @@ func TestStatusSandboxSuccessfulStateReady(t *testing.T) {
 		DefaultBridges:    defaultBridges,
 		BlockDeviceDriver: defaultBlockDriver,
 		DefaultMaxVCPUs:   defaultMaxQemuVCPUs,
-		Msize9p:           defaultMsize9p,
 	}
 
-	expectedStatus := SandboxStatus{
-		ID: testSandboxID,
+	expectedStatus := PodStatus{
+		ID: testPodID,
 		State: State{
 			State: StateReady,
 		},
 		Hypervisor:       MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 		Agent:            NoopAgentType,
-		Annotations:      sandboxAnnotations,
+		Annotations:      podAnnotations,
 		ContainersStatus: []ContainerStatus{
 			{
 				ID: containerID,
@@ -928,12 +937,12 @@ func TestStatusSandboxSuccessfulStateReady(t *testing.T) {
 		},
 	}
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := StatusSandbox(p.ID())
+	status, err := StatusPod(p.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -943,14 +952,14 @@ func TestStatusSandboxSuccessfulStateReady(t *testing.T) {
 	expectedStatus.ContainersStatus[0].StartTime = status.ContainersStatus[0].StartTime
 
 	if reflect.DeepEqual(status, expectedStatus) == false {
-		t.Fatalf("Got sandbox status %v\n expecting %v", status, expectedStatus)
+		t.Fatalf("Got pod status %v\n expecting %v", status, expectedStatus)
 	}
 }
 
-func TestStatusSandboxSuccessfulStateRunning(t *testing.T) {
+func TestStatusPodSuccessfulStateRunning(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 	hypervisorConfig := HypervisorConfig{
 		KernelPath:        filepath.Join(testDir, testKernel),
 		ImagePath:         filepath.Join(testDir, testImage),
@@ -960,18 +969,17 @@ func TestStatusSandboxSuccessfulStateRunning(t *testing.T) {
 		DefaultBridges:    defaultBridges,
 		BlockDeviceDriver: defaultBlockDriver,
 		DefaultMaxVCPUs:   defaultMaxQemuVCPUs,
-		Msize9p:           defaultMsize9p,
 	}
 
-	expectedStatus := SandboxStatus{
-		ID: testSandboxID,
+	expectedStatus := PodStatus{
+		ID: testPodID,
 		State: State{
 			State: StateRunning,
 		},
 		Hypervisor:       MockHypervisor,
 		HypervisorConfig: hypervisorConfig,
 		Agent:            NoopAgentType,
-		Annotations:      sandboxAnnotations,
+		Annotations:      podAnnotations,
 		ContainersStatus: []ContainerStatus{
 			{
 				ID: containerID,
@@ -985,17 +993,17 @@ func TestStatusSandboxSuccessfulStateRunning(t *testing.T) {
 		},
 	}
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = StartSandbox(p.ID())
+	p, err = StartPod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	status, err := StatusSandbox(p.ID())
+	status, err := StatusPod(p.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1005,47 +1013,45 @@ func TestStatusSandboxSuccessfulStateRunning(t *testing.T) {
 	expectedStatus.ContainersStatus[0].StartTime = status.ContainersStatus[0].StartTime
 
 	if reflect.DeepEqual(status, expectedStatus) == false {
-		t.Fatalf("Got sandbox status %v\n expecting %v", status, expectedStatus)
+		t.Fatalf("Got pod status %v\n expecting %v", status, expectedStatus)
 	}
 }
 
-func TestStatusSandboxFailingFetchSandboxConfig(t *testing.T) {
+func TestStatusPodFailingFetchPodConfig(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
 	path := filepath.Join(configStoragePath, p.ID())
 	os.RemoveAll(path)
-	globalSandboxList.removeSandbox(p.ID())
 
-	_, err = StatusSandbox(p.ID())
+	_, err = StatusPod(p.ID())
 	if err == nil {
 		t.Fatal()
 	}
 }
 
-func TestStatusPodSandboxFailingFetchSandboxState(t *testing.T) {
+func TestStatusPodPodFailingFetchPodState(t *testing.T) {
 	cleanUp()
 
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
 	os.RemoveAll(pImpl.configPath)
-	globalSandboxList.removeSandbox(p.ID())
 
-	_, err = StatusSandbox(p.ID())
+	_, err = StatusPod(p.ID())
 	if err == nil {
 		t.Fatal()
 	}
@@ -1067,15 +1073,15 @@ func TestCreateContainerSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1087,31 +1093,31 @@ func TestCreateContainerSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCreateContainerFailingNoSandbox(t *testing.T) {
+func TestCreateContainerFailingNoPod(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = DeleteSandbox(p.ID())
+	p, err = DeletePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err == nil {
 		t.Fatal()
 	}
@@ -1128,15 +1134,15 @@ func TestDeleteContainerSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1148,7 +1154,7 @@ func TestDeleteContainerSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1165,14 +1171,14 @@ func TestDeleteContainerSuccessful(t *testing.T) {
 	}
 }
 
-func TestDeleteContainerFailingNoSandbox(t *testing.T) {
+func TestDeleteContainerFailingNoPod(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
+	podDir := filepath.Join(configStoragePath, testPodID)
 	contID := "100"
-	os.RemoveAll(sandboxDir)
+	os.RemoveAll(podDir)
 
-	c, err := DeleteContainer(testSandboxID, contID)
+	c, err := DeleteContainer(testPodID, contID)
 	if c != nil || err == nil {
 		t.Fatal()
 	}
@@ -1182,15 +1188,15 @@ func TestDeleteContainerFailingNoContainer(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1205,9 +1211,9 @@ func TestStartContainerNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1218,7 +1224,7 @@ func TestStartContainerNoopAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1230,14 +1236,14 @@ func TestStartContainerNoopAgentSuccessful(t *testing.T) {
 	}
 }
 
-func TestStartContainerFailingNoSandbox(t *testing.T) {
+func TestStartContainerFailingNoPod(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
+	podDir := filepath.Join(configStoragePath, testPodID)
 	contID := "100"
-	os.RemoveAll(sandboxDir)
+	os.RemoveAll(podDir)
 
-	c, err := StartContainer(testSandboxID, contID)
+	c, err := StartContainer(testPodID, contID)
 	if c != nil || err == nil {
 		t.Fatal()
 	}
@@ -1247,15 +1253,15 @@ func TestStartContainerFailingNoContainer(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1266,19 +1272,19 @@ func TestStartContainerFailingNoContainer(t *testing.T) {
 	}
 }
 
-func TestStartContainerFailingSandboxNotStarted(t *testing.T) {
+func TestStartContainerFailingPodNotStarted(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1290,7 +1296,7 @@ func TestStartContainerFailingSandboxNotStarted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1306,9 +1312,9 @@ func TestStopContainerNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1320,7 +1326,7 @@ func TestStopContainerNoopAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1345,7 +1351,7 @@ func TestStartStopContainerHyperstartAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -1362,7 +1368,7 @@ func TestStartStopContainerHyperstartAgentSuccessful(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1374,7 +1380,7 @@ func TestStartStopContainerHyperstartAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1390,20 +1396,20 @@ func TestStartStopContainerHyperstartAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestStartStopSandboxHyperstartAgentSuccessfulWithCNINetwork(t *testing.T) {
+func TestStartStopPodHyperstartAgentSuccessfulWithCNINetwork(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
 	cleanUp()
 
-	config := newTestSandboxConfigHyperstartAgentCNINetwork()
+	config := newTestPodConfigHyperstartAgentCNINetwork()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -1420,28 +1426,28 @@ func TestStartStopSandboxHyperstartAgentSuccessfulWithCNINetwork(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = StopSandbox(p.ID())
+	p, err = StopPod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = DeleteSandbox(p.ID())
+	p, err = DeletePod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestStartStopSandboxHyperstartAgentSuccessfulWithCNMNetwork(t *testing.T) {
+func TestStartStopPodHyperstartAgentSuccessfulWithCNMNetwork(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip(testDisabledAsNonRoot)
 	}
 
-	config := newTestSandboxConfigHyperstartAgentCNMNetwork()
+	config := newTestPodConfigHyperstartAgentCNMNetwork()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -1458,30 +1464,30 @@ func TestStartStopSandboxHyperstartAgentSuccessfulWithCNMNetwork(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, _, err := createAndStartSandbox(config)
+	p, _, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	v, err := StopSandbox(p.ID())
+	v, err := StopPod(p.ID())
 	if v == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	v, err = DeleteSandbox(p.ID())
+	v, err = DeletePod(p.ID())
 	if v == nil || err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestStopContainerFailingNoSandbox(t *testing.T) {
+func TestStopContainerFailingNoPod(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
+	podDir := filepath.Join(configStoragePath, testPodID)
 	contID := "100"
-	os.RemoveAll(sandboxDir)
+	os.RemoveAll(podDir)
 
-	c, err := StopContainer(testSandboxID, contID)
+	c, err := StopContainer(testPodID, contID)
 	if c != nil || err == nil {
 		t.Fatal()
 	}
@@ -1491,15 +1497,15 @@ func TestStopContainerFailingNoContainer(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1514,9 +1520,9 @@ func testKillContainerFromContReadySuccessful(t *testing.T, signal syscall.Signa
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1528,7 +1534,7 @@ func testKillContainerFromContReadySuccessful(t *testing.T, signal syscall.Signa
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1554,9 +1560,9 @@ func TestEnterContainerNoopAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1568,7 +1574,7 @@ func TestEnterContainerNoopAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1595,7 +1601,7 @@ func TestEnterContainerHyperstartAgentSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigHyperstartAgent()
+	config := newTestPodConfigHyperstartAgent()
 
 	sockDir, err := testGenerateCCProxySockDir()
 	if err != nil {
@@ -1612,7 +1618,7 @@ func TestEnterContainerHyperstartAgentSuccessful(t *testing.T) {
 	hyperConfig := config.AgentConfig.(HyperConfig)
 	config.AgentConfig = hyperConfig
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1624,7 +1630,7 @@ func TestEnterContainerHyperstartAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1647,22 +1653,22 @@ func TestEnterContainerHyperstartAgentSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
-	bindUnmountAllRootfs(defaultSharedDir, pImpl)
+	bindUnmountAllRootfs(defaultSharedDir, *pImpl)
 }
 
-func TestEnterContainerFailingNoSandbox(t *testing.T) {
+func TestEnterContainerFailingNoPod(t *testing.T) {
 	cleanUp()
 
-	sandboxDir := filepath.Join(configStoragePath, testSandboxID)
+	podDir := filepath.Join(configStoragePath, testPodID)
 	contID := "100"
-	os.RemoveAll(sandboxDir)
+	os.RemoveAll(podDir)
 
 	cmd := newBasicTestCmd()
 
-	_, c, _, err := EnterContainer(testSandboxID, contID, cmd)
+	_, c, _, err := EnterContainer(testPodID, contID, cmd)
 	if c != nil || err == nil {
 		t.Fatal()
 	}
@@ -1672,15 +1678,15 @@ func TestEnterContainerFailingNoContainer(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1697,9 +1703,9 @@ func TestEnterContainerFailingContNotStarted(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, sandboxDir, err := createAndStartSandbox(config)
+	p, podDir, err := createAndStartPod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
@@ -1711,7 +1717,7 @@ func TestEnterContainerFailingContNotStarted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1720,7 +1726,7 @@ func TestEnterContainerFailingContNotStarted(t *testing.T) {
 	cmd := newBasicTestCmd()
 
 	_, c, _, err = EnterContainer(p.ID(), contID, cmd)
-	if c == nil || err != nil {
+	if c != nil || err == nil {
 		t.Fatal()
 	}
 }
@@ -1729,15 +1735,15 @@ func TestStatusContainerSuccessful(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1749,7 +1755,7 @@ func TestStatusContainerSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
@@ -1760,7 +1766,7 @@ func TestStatusContainerSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
 	cImpl, ok := c.(*Container)
@@ -1780,15 +1786,15 @@ func TestStatusContainerStateReady(t *testing.T) {
 
 	// (homage to a great album! ;)
 	contID := "101"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1800,14 +1806,14 @@ func TestStatusContainerStateReady(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// fresh lookup
-	p2, err := fetchSandbox(p.ID())
+	p2, err := fetchPod(p.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1843,20 +1849,20 @@ func TestStatusContainerStateRunning(t *testing.T) {
 
 	// (homage to a great album! ;)
 	contID := "101"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	p, err = StartSandbox(p.ID())
+	p, err = StartPod(p.ID())
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	sandboxDir := filepath.Join(configStoragePath, p.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir := filepath.Join(configStoragePath, p.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1873,14 +1879,14 @@ func TestStatusContainerStateRunning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	contDir := filepath.Join(sandboxDir, contID)
+	contDir := filepath.Join(podDir, contID)
 	_, err = os.Stat(contDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// fresh lookup
-	p2, err := fetchSandbox(p.ID())
+	p2, err := fetchPod(p.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1915,91 +1921,22 @@ func TestStatusContainerFailing(t *testing.T) {
 	cleanUp()
 
 	contID := "100"
-	config := newTestSandboxConfigNoop()
+	config := newTestPodConfigNoop()
 
-	p, err := CreateSandbox(config)
+	p, err := CreatePod(config)
 	if p == nil || err != nil {
 		t.Fatal(err)
 	}
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(t, ok)
 
 	os.RemoveAll(pImpl.configPath)
-	globalSandboxList.removeSandbox(p.ID())
 
 	_, err = StatusContainer(p.ID(), contID)
 	if err == nil {
 		t.Fatal()
 	}
-}
-
-func TestStatsContainerFailing(t *testing.T) {
-	cleanUp()
-
-	contID := "100"
-	config := newTestSandboxConfigNoop()
-
-	p, err := CreateSandbox(config)
-	if p == nil || err != nil {
-		t.Fatal(err)
-	}
-
-	pImpl, ok := p.(*Sandbox)
-	assert.True(t, ok)
-
-	os.RemoveAll(pImpl.configPath)
-	globalSandboxList.removeSandbox(p.ID())
-
-	_, err = StatsContainer(p.ID(), contID)
-	if err == nil {
-		t.Fatal()
-	}
-}
-
-func TestStatsContainer(t *testing.T) {
-	cleanUp()
-
-	assert := assert.New(t)
-	contID := "100"
-
-	_, err := StatsContainer("", "")
-	assert.Error(err)
-
-	_, err = StatsContainer("abc", "")
-	assert.Error(err)
-
-	_, err = StatsContainer("abc", "abc")
-	assert.Error(err)
-
-	config := newTestSandboxConfigNoop()
-	p, err := CreateSandbox(config)
-	assert.NoError(err)
-	assert.NotNil(p)
-
-	p, err = StartSandbox(p.ID())
-	if p == nil || err != nil {
-		t.Fatal(err)
-	}
-
-	pImpl, ok := p.(*Sandbox)
-	assert.True(ok)
-	defer os.RemoveAll(pImpl.configPath)
-
-	contConfig := newTestContainerConfigNoop(contID)
-	_, c, err := CreateContainer(p.ID(), contConfig)
-	assert.NoError(err)
-	assert.NotNil(c)
-
-	_, err = StatsContainer(pImpl.id, "xyz")
-	assert.Error(err)
-
-	_, err = StatsContainer("xyz", contID)
-	assert.Error(err)
-
-	stats, err := StatsContainer(pImpl.id, contID)
-	assert.NoError(err)
-	assert.Equal(stats, ContainerStats{})
 }
 
 func TestProcessListContainer(t *testing.T) {
@@ -2022,12 +1959,12 @@ func TestProcessListContainer(t *testing.T) {
 	_, err = ProcessListContainer("xyz", "xyz", options)
 	assert.Error(err)
 
-	config := newTestSandboxConfigNoop()
-	p, err := CreateSandbox(config)
+	config := newTestPodConfigNoop()
+	p, err := CreatePod(config)
 	assert.NoError(err)
 	assert.NotNil(p)
 
-	pImpl, ok := p.(*Sandbox)
+	pImpl, ok := p.(*Pod)
 	assert.True(ok)
 	defer os.RemoveAll(pImpl.configPath)
 
@@ -2043,7 +1980,7 @@ func TestProcessListContainer(t *testing.T) {
 	assert.Error(err)
 
 	_, err = ProcessListContainer(pImpl.id, contID, options)
-	// Sandbox not running, impossible to ps the container
+	// Pod not running, impossible to ps the container
 	assert.Error(err)
 }
 
@@ -2051,7 +1988,7 @@ func TestProcessListContainer(t *testing.T) {
  * Benchmarks
  */
 
-func createNewSandboxConfig(hType HypervisorType, aType AgentType, aConfig interface{}, netModel NetworkModel) SandboxConfig {
+func createNewPodConfig(hType HypervisorType, aType AgentType, aConfig interface{}, netModel NetworkModel) PodConfig {
 	hypervisorConfig := HypervisorConfig{
 		KernelPath:     "/usr/share/kata-containers/vmlinux.container",
 		ImagePath:      "/usr/share/kata-containers/kata-containers.img",
@@ -2062,8 +1999,8 @@ func createNewSandboxConfig(hType HypervisorType, aType AgentType, aConfig inter
 		NumInterfaces: 1,
 	}
 
-	return SandboxConfig{
-		ID:               testSandboxID,
+	return PodConfig{
+		ID:               testPodID,
 		HypervisorType:   hType,
 		HypervisorConfig: hypervisorConfig,
 
@@ -2111,62 +2048,62 @@ func createNewContainerConfigs(numOfContainers int) []ContainerConfig {
 	return contConfigs
 }
 
-// createAndStartSandbox handles the common test operation of creating and
-// starting a sandbox.
-func createAndStartSandbox(config SandboxConfig) (sandbox VCSandbox, sandboxDir string,
+// createAndStartPod handles the common test operation of creating and
+// starting a pod.
+func createAndStartPod(config PodConfig) (pod VCPod, podDir string,
 	err error) {
 
-	// Create sandbox
-	sandbox, err = CreateSandbox(config)
-	if sandbox == nil || err != nil {
+	// Create pod
+	pod, err = CreatePod(config)
+	if pod == nil || err != nil {
 		return nil, "", err
 	}
 
-	sandboxDir = filepath.Join(configStoragePath, sandbox.ID())
-	_, err = os.Stat(sandboxDir)
+	podDir = filepath.Join(configStoragePath, pod.ID())
+	_, err = os.Stat(podDir)
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Start sandbox
-	sandbox, err = StartSandbox(sandbox.ID())
-	if sandbox == nil || err != nil {
+	// Start pod
+	pod, err = StartPod(pod.ID())
+	if pod == nil || err != nil {
 		return nil, "", err
 	}
 
-	return sandbox, sandboxDir, nil
+	return pod, podDir, nil
 }
 
-func createStartStopDeleteSandbox(b *testing.B, sandboxConfig SandboxConfig) {
-	p, _, err := createAndStartSandbox(sandboxConfig)
+func createStartStopDeletePod(b *testing.B, podConfig PodConfig) {
+	p, _, err := createAndStartPod(podConfig)
 	if p == nil || err != nil {
-		b.Fatalf("Could not create and start sandbox: %s", err)
+		b.Fatalf("Could not create and start pod: %s", err)
 	}
 
-	// Stop sandbox
-	_, err = StopSandbox(p.ID())
+	// Stop pod
+	_, err = StopPod(p.ID())
 	if err != nil {
-		b.Fatalf("Could not stop sandbox: %s", err)
+		b.Fatalf("Could not stop pod: %s", err)
 	}
 
-	// Delete sandbox
-	_, err = DeleteSandbox(p.ID())
+	// Delete pod
+	_, err = DeletePod(p.ID())
 	if err != nil {
-		b.Fatalf("Could not delete sandbox: %s", err)
+		b.Fatalf("Could not delete pod: %s", err)
 	}
 }
 
-func createStartStopDeleteContainers(b *testing.B, sandboxConfig SandboxConfig, contConfigs []ContainerConfig) {
-	// Create sandbox
-	p, err := CreateSandbox(sandboxConfig)
+func createStartStopDeleteContainers(b *testing.B, podConfig PodConfig, contConfigs []ContainerConfig) {
+	// Create pod
+	p, err := CreatePod(podConfig)
 	if err != nil {
-		b.Fatalf("Could not create sandbox: %s", err)
+		b.Fatalf("Could not create pod: %s", err)
 	}
 
-	// Start sandbox
-	_, err = StartSandbox(p.ID())
+	// Start pod
+	_, err = StartPod(p.ID())
 	if err != nil {
-		b.Fatalf("Could not start sandbox: %s", err)
+		b.Fatalf("Could not start pod: %s", err)
 	}
 
 	// Create containers
@@ -2201,22 +2138,22 @@ func createStartStopDeleteContainers(b *testing.B, sandboxConfig SandboxConfig, 
 		}
 	}
 
-	// Stop sandbox
-	_, err = StopSandbox(p.ID())
+	// Stop pod
+	_, err = StopPod(p.ID())
 	if err != nil {
-		b.Fatalf("Could not stop sandbox: %s", err)
+		b.Fatalf("Could not stop pod: %s", err)
 	}
 
-	// Delete sandbox
-	_, err = DeleteSandbox(p.ID())
+	// Delete pod
+	_, err = DeletePod(p.ID())
 	if err != nil {
-		b.Fatalf("Could not delete sandbox: %s", err)
+		b.Fatalf("Could not delete pod: %s", err)
 	}
 }
 
-func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorHyperstartAgentNetworkCNI(b *testing.B) {
+func BenchmarkCreateStartStopDeletePodQemuHypervisorHyperstartAgentNetworkCNI(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, CNINetworkModel)
+		podConfig := createNewPodConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, CNINetworkModel)
 
 		sockDir, err := testGenerateCCProxySockDir()
 		if err != nil {
@@ -2231,20 +2168,20 @@ func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorHyperstartAgentNetworkCN
 		proxy.Start()
 		defer proxy.Stop()
 
-		createStartStopDeleteSandbox(b, sandboxConfig)
+		createStartStopDeletePod(b, podConfig)
 	}
 }
 
-func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorNoopAgentNetworkCNI(b *testing.B) {
+func BenchmarkCreateStartStopDeletePodQemuHypervisorNoopAgentNetworkCNI(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, NoopAgentType, nil, CNINetworkModel)
-		createStartStopDeleteSandbox(b, sandboxConfig)
+		podConfig := createNewPodConfig(QemuHypervisor, NoopAgentType, nil, CNINetworkModel)
+		createStartStopDeletePod(b, podConfig)
 	}
 }
 
-func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorHyperstartAgentNetworkNoop(b *testing.B) {
+func BenchmarkCreateStartStopDeletePodQemuHypervisorHyperstartAgentNetworkNoop(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
+		podConfig := createNewPodConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
 
 		sockDir, err := testGenerateCCProxySockDir()
 		if err != nil {
@@ -2259,27 +2196,27 @@ func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorHyperstartAgentNetworkNo
 		proxy.Start()
 		defer proxy.Stop()
 
-		createStartStopDeleteSandbox(b, sandboxConfig)
+		createStartStopDeletePod(b, podConfig)
 	}
 }
 
-func BenchmarkCreateStartStopDeleteSandboxQemuHypervisorNoopAgentNetworkNoop(b *testing.B) {
+func BenchmarkCreateStartStopDeletePodQemuHypervisorNoopAgentNetworkNoop(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, NoopAgentType, nil, NoopNetworkModel)
-		createStartStopDeleteSandbox(b, sandboxConfig)
+		podConfig := createNewPodConfig(QemuHypervisor, NoopAgentType, nil, NoopNetworkModel)
+		createStartStopDeletePod(b, podConfig)
 	}
 }
 
-func BenchmarkCreateStartStopDeleteSandboxMockHypervisorNoopAgentNetworkNoop(b *testing.B) {
+func BenchmarkCreateStartStopDeletePodMockHypervisorNoopAgentNetworkNoop(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(MockHypervisor, NoopAgentType, nil, NoopNetworkModel)
-		createStartStopDeleteSandbox(b, sandboxConfig)
+		podConfig := createNewPodConfig(MockHypervisor, NoopAgentType, nil, NoopNetworkModel)
+		createStartStopDeletePod(b, podConfig)
 	}
 }
 
 func BenchmarkStartStop1ContainerQemuHypervisorHyperstartAgentNetworkNoop(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
+		podConfig := createNewPodConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
 		contConfigs := createNewContainerConfigs(1)
 
 		sockDir, err := testGenerateCCProxySockDir()
@@ -2295,13 +2232,13 @@ func BenchmarkStartStop1ContainerQemuHypervisorHyperstartAgentNetworkNoop(b *tes
 		proxy.Start()
 		defer proxy.Stop()
 
-		createStartStopDeleteContainers(b, sandboxConfig, contConfigs)
+		createStartStopDeleteContainers(b, podConfig, contConfigs)
 	}
 }
 
 func BenchmarkStartStop10ContainerQemuHypervisorHyperstartAgentNetworkNoop(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		sandboxConfig := createNewSandboxConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
+		podConfig := createNewPodConfig(QemuHypervisor, HyperstartAgent, HyperConfig{}, NoopNetworkModel)
 		contConfigs := createNewContainerConfigs(10)
 
 		sockDir, err := testGenerateCCProxySockDir()
@@ -2317,126 +2254,6 @@ func BenchmarkStartStop10ContainerQemuHypervisorHyperstartAgentNetworkNoop(b *te
 		proxy.Start()
 		defer proxy.Stop()
 
-		createStartStopDeleteContainers(b, sandboxConfig, contConfigs)
+		createStartStopDeleteContainers(b, podConfig, contConfigs)
 	}
-}
-
-func TestFetchSandbox(t *testing.T) {
-	cleanUp()
-
-	config := newTestSandboxConfigNoop()
-
-	s, err := CreateSandbox(config)
-	if s == nil || err != nil {
-		t.Fatal(err)
-	}
-
-	fetched, err := FetchSandbox(s.ID())
-	assert.Nil(t, err, "%v", err)
-	assert.True(t, fetched == s, "fetched sandboxed do not match")
-}
-
-func TestFetchNonExistingSandbox(t *testing.T) {
-	cleanUp()
-
-	_, err := FetchSandbox("some-non-existing-sandbox-name")
-	assert.NotNil(t, err, "fetch non-existing sandbox should fail")
-}
-
-func TestReleaseSandbox(t *testing.T) {
-	cleanUp()
-
-	config := newTestSandboxConfigNoop()
-
-	s, err := CreateSandbox(config)
-	if s == nil || err != nil {
-		t.Fatal(err)
-	}
-	err = s.Release()
-	assert.Nil(t, err, "sandbox release failed: %v", err)
-}
-
-func TestUpdateContainer(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip(testDisabledAsNonRoot)
-	}
-
-	cleanUp()
-
-	period := uint64(1000)
-	quota := int64(2000)
-	assert := assert.New(t)
-	resources := specs.LinuxResources{
-		CPU: &specs.LinuxCPU{
-			Period: &period,
-			Quota:  &quota,
-		},
-	}
-	err := UpdateContainer("", "", resources)
-	assert.Error(err)
-
-	err = UpdateContainer("abc", "", resources)
-	assert.Error(err)
-
-	contID := "100"
-	config := newTestSandboxConfigNoop()
-
-	s, sandboxDir, err := createAndStartSandbox(config)
-	assert.NoError(err)
-	assert.NotNil(s)
-
-	contConfig := newTestContainerConfigNoop(contID)
-	_, c, err := CreateContainer(s.ID(), contConfig)
-	assert.NoError(err)
-	assert.NotNil(c)
-
-	contDir := filepath.Join(sandboxDir, contID)
-	_, err = os.Stat(contDir)
-	assert.NoError(err)
-
-	_, err = StartContainer(s.ID(), contID)
-	assert.NoError(err)
-
-	err = UpdateContainer(s.ID(), contID, resources)
-	assert.NoError(err)
-}
-
-func TestPauseResumeContainer(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip(testDisabledAsNonRoot)
-	}
-
-	cleanUp()
-
-	assert := assert.New(t)
-	err := PauseContainer("", "")
-	assert.Error(err)
-
-	err = PauseContainer("abc", "")
-	assert.Error(err)
-
-	contID := "100"
-	config := newTestSandboxConfigNoop()
-
-	s, sandboxDir, err := createAndStartSandbox(config)
-	assert.NoError(err)
-	assert.NotNil(s)
-
-	contConfig := newTestContainerConfigNoop(contID)
-	_, c, err := CreateContainer(s.ID(), contConfig)
-	assert.NoError(err)
-	assert.NotNil(c)
-
-	contDir := filepath.Join(sandboxDir, contID)
-	_, err = os.Stat(contDir)
-	assert.NoError(err)
-
-	_, err = StartContainer(s.ID(), contID)
-	assert.NoError(err)
-
-	err = PauseContainer(s.ID(), contID)
-	assert.NoError(err)
-
-	err = ResumeContainer(s.ID(), contID)
-	assert.NoError(err)
 }

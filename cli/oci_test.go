@@ -1,7 +1,16 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// SPDX-License-Identifier: Apache-2.0
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -74,8 +83,8 @@ func TestGetContainerInfoContainerIDEmptyFailure(t *testing.T) {
 func TestGetContainerInfo(t *testing.T) {
 	assert := assert.New(t)
 
-	sandbox := &vcmock.Sandbox{
-		MockID: testSandboxID,
+	pod := &vcmock.Pod{
+		MockID: testPodID,
 	}
 
 	containerID := testContainerID
@@ -87,22 +96,57 @@ func TestGetContainerInfo(t *testing.T) {
 		},
 	}
 
-	path, err := createTempContainerIDMapping(containerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
-		return containerStatus, nil
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{
+			{
+				ID:               pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{containerStatus},
+			},
+		}, nil
 	}
 
 	defer func() {
-		testingImpl.StatusContainerFunc = nil
+		testingImpl.ListPodFunc = nil
 	}()
 
-	status, sandboxID, err := getContainerInfo(testContainerID)
+	status, podID, err := getContainerInfo(testContainerID)
 	assert.NoError(err)
-	assert.Equal(sandboxID, sandbox.ID())
+	assert.Equal(podID, pod.ID())
 	assert.Equal(status, containerStatus)
+}
+
+func TestGetContainerInfoMismatch(t *testing.T) {
+	assert := assert.New(t)
+
+	pod := &vcmock.Pod{
+		MockID: testPodID,
+	}
+
+	containerID := testContainerID + testContainerID
+
+	containerStatus := vc.ContainerStatus{
+		ID: containerID,
+		Annotations: map[string]string{
+			vcAnnotations.ContainerTypeKey: string(vc.PodSandbox),
+		},
+	}
+
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{
+			{
+				ID:               pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{containerStatus},
+			},
+		}, nil
+	}
+
+	defer func() {
+		testingImpl.ListPodFunc = nil
+	}()
+
+	_, podID, err := getContainerInfo(testContainerID)
+	assert.NoError(err)
+	assert.Equal(podID, "")
 }
 
 func TestValidCreateParamsContainerIDEmptyFailure(t *testing.T) {
@@ -124,16 +168,75 @@ func TestGetExistingContainerInfoContainerIDEmptyFailure(t *testing.T) {
 func TestValidCreateParamsContainerIDNotUnique(t *testing.T) {
 	assert := assert.New(t)
 
-	testSandboxID2 := testSandboxID + "2"
+	containerID := testContainerID + testContainerID
 
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	err = os.MkdirAll(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID2), 0750)
-	assert.NoError(err)
+	pod := &vcmock.Pod{
+		MockID: testPodID,
+	}
 
-	_, err = validCreateParams(testContainerID, "")
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{
+			{
+				ID: pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{
+					// 2 containers with same ID
+					{
+						ID: containerID,
+						Annotations: map[string]string{
+							vcAnnotations.ContainerTypeKey: string(vc.PodSandbox),
+						},
+					},
+					{
+						ID: containerID,
+						Annotations: map[string]string{
+							vcAnnotations.ContainerTypeKey: string(vc.PodSandbox),
+						},
+					},
+				},
+			},
+		}, nil
+	}
 
+	defer func() {
+		testingImpl.ListPodFunc = nil
+	}()
+
+	_, err := validCreateParams(testContainerID, "")
+
+	assert.Error(err)
+	assert.False(vcmock.IsMockError(err))
+}
+
+func TestValidCreateParamsContainerIDNotUnique2(t *testing.T) {
+	assert := assert.New(t)
+
+	containerID := testContainerID + testContainerID
+
+	pod := &vcmock.Pod{
+		MockID: testPodID,
+	}
+
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{
+			{
+				ID: pod.ID(),
+				ContainersStatus: []vc.ContainerStatus{
+					{
+						ID: containerID,
+						Annotations: map[string]string{
+							vcAnnotations.ContainerTypeKey: string(vc.PodSandbox),
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	defer func() {
+		testingImpl.ListPodFunc = nil
+	}()
+
+	_, err := validCreateParams(testContainerID, "")
 	assert.Error(err)
 	assert.False(vcmock.IsMockError(err))
 }
@@ -147,10 +250,13 @@ func TestValidCreateParamsInvalidBundle(t *testing.T) {
 
 	bundlePath := filepath.Join(tmpdir, "bundle")
 
-	path, err := ioutil.TempDir("", "containers-mapping")
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	ctrsMapTreePath = path
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{}, nil
+	}
+
+	defer func() {
+		testingImpl.ListPodFunc = nil
+	}()
 
 	_, err = validCreateParams(testContainerID, bundlePath)
 	// bundle is ENOENT
@@ -169,10 +275,13 @@ func TestValidCreateParamsBundleIsAFile(t *testing.T) {
 	err = createEmptyFile(bundlePath)
 	assert.NoError(err)
 
-	path, err := ioutil.TempDir("", "containers-mapping")
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	ctrsMapTreePath = path
+	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+		return []vc.PodStatus{}, nil
+	}
+
+	defer func() {
+		testingImpl.ListPodFunc = nil
+	}()
 
 	_, err = validCreateParams(testContainerID, bundlePath)
 	// bundle exists as a file, not a directory
@@ -267,8 +376,8 @@ func TestProcessCgroupsPathAbsoluteNoCgroupMountDestinationFailure(t *testing.T)
 
 	for _, d := range cgroupTestData {
 		ociSpec.Linux.Resources = d.linuxSpec
-		for _, isSandbox := range []bool{true, false} {
-			_, err := processCgroupsPath(ociSpec, isSandbox)
+		for _, isPod := range []bool{true, false} {
+			_, err := processCgroupsPath(ociSpec, isPod)
 			assert.Error(err, "This test should fail because no cgroup mount destination provided")
 		}
 	}
@@ -453,8 +562,8 @@ func TestProcessCgroupsPathForResource(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	for _, isSandbox := range []bool{true, false} {
-		_, err := processCgroupsPathForResource(spec, "", isSandbox)
+	for _, isPod := range []bool{true, false} {
+		_, err := processCgroupsPathForResource(spec, "", isPod)
 		assert.Error(err)
 		assert.False(vcmock.IsMockError(err))
 	}
@@ -511,107 +620,4 @@ func TestGetCgroupsDirPath(t *testing.T) {
 
 		assert.Equal(d.expectedResult, path)
 	}
-}
-
-func TestFetchContainerIDMappingContainerIDEmptyFailure(t *testing.T) {
-	assert := assert.New(t)
-
-	sandboxID, err := fetchContainerIDMapping("")
-	assert.Error(err)
-	assert.Empty(sandboxID)
-}
-
-func TestFetchContainerIDMappingEmptyMappingSuccess(t *testing.T) {
-	assert := assert.New(t)
-
-	path, err := ioutil.TempDir("", "containers-mapping")
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	ctrsMapTreePath = path
-
-	sandboxID, err := fetchContainerIDMapping(testContainerID)
-	assert.NoError(err)
-	assert.Empty(sandboxID)
-}
-
-func TestFetchContainerIDMappingTooManyFilesFailure(t *testing.T) {
-	assert := assert.New(t)
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	err = os.MkdirAll(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID+"2"), ctrsMappingDirMode)
-	assert.NoError(err)
-
-	sandboxID, err := fetchContainerIDMapping(testContainerID)
-	assert.Error(err)
-	assert.Empty(sandboxID)
-}
-
-func TestFetchContainerIDMappingSuccess(t *testing.T) {
-	assert := assert.New(t)
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	sandboxID, err := fetchContainerIDMapping(testContainerID)
-	assert.NoError(err)
-	assert.Equal(sandboxID, testSandboxID)
-}
-
-func TestAddContainerIDMappingContainerIDEmptyFailure(t *testing.T) {
-	assert := assert.New(t)
-
-	err := addContainerIDMapping("", testSandboxID)
-	assert.Error(err)
-}
-
-func TestAddContainerIDMappingSandboxIDEmptyFailure(t *testing.T) {
-	assert := assert.New(t)
-
-	err := addContainerIDMapping(testContainerID, "")
-	assert.Error(err)
-}
-
-func TestAddContainerIDMappingSuccess(t *testing.T) {
-	assert := assert.New(t)
-
-	path, err := ioutil.TempDir("", "containers-mapping")
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-	ctrsMapTreePath = path
-
-	_, err = os.Stat(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID))
-	assert.True(os.IsNotExist(err))
-
-	err = addContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-
-	_, err = os.Stat(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID))
-	assert.NoError(err)
-}
-
-func TestDelContainerIDMappingContainerIDEmptyFailure(t *testing.T) {
-	assert := assert.New(t)
-
-	err := delContainerIDMapping("")
-	assert.Error(err)
-}
-
-func TestDelContainerIDMappingSuccess(t *testing.T) {
-	assert := assert.New(t)
-
-	path, err := createTempContainerIDMapping(testContainerID, testSandboxID)
-	assert.NoError(err)
-	defer os.RemoveAll(path)
-
-	_, err = os.Stat(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID))
-	assert.NoError(err)
-
-	err = delContainerIDMapping(testContainerID)
-	assert.NoError(err)
-
-	_, err = os.Stat(filepath.Join(ctrsMapTreePath, testContainerID, testSandboxID))
-	assert.True(os.IsNotExist(err))
 }
