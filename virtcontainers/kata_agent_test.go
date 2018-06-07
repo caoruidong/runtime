@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2018 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -25,18 +14,23 @@ import (
 	"testing"
 
 	gpb "github.com/gogo/protobuf/types"
-	pb "github.com/kata-containers/agent/protocols/grpc"
-	"github.com/kata-containers/runtime/virtcontainers/pkg/mock"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+
+	pb "github.com/kata-containers/agent/protocols/grpc"
+	"github.com/kata-containers/runtime/virtcontainers/device/api"
+	"github.com/kata-containers/runtime/virtcontainers/device/config"
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
+	"github.com/kata-containers/runtime/virtcontainers/pkg/mock"
 )
 
 var (
-	testKataProxyURLTempl   = "unix://%s/kata-proxy-test.sock"
-	testBlockDeviceVirtPath = "testBlockDeviceVirtPath"
-	testBlockDeviceCtrPath  = "testBlockDeviceCtrPath"
+	testKataProxyURLTempl  = "unix://%s/kata-proxy-test.sock"
+	testBlockDeviceCtrPath = "testBlockDeviceCtrPath"
+	testPCIAddr            = "04/02"
 )
 
 func proxyHandlerDiscard(c net.Conn) {
@@ -145,6 +139,14 @@ func (p *gRPCProxy) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest)
 	return &pb.WaitProcessResponse{}, nil
 }
 
+func (p *gRPCProxy) ListProcesses(ctx context.Context, req *pb.ListProcessesRequest) (*pb.ListProcessesResponse, error) {
+	return &pb.ListProcessesResponse{}, nil
+}
+
+func (p *gRPCProxy) UpdateContainer(ctx context.Context, req *pb.UpdateContainerRequest) (*gpb.Empty, error) {
+	return emptyResp, nil
+}
+
 func (p *gRPCProxy) RemoveContainer(ctx context.Context, req *pb.RemoveContainerRequest) (*gpb.Empty, error) {
 	return emptyResp, nil
 }
@@ -197,10 +199,32 @@ func (p *gRPCProxy) OnlineCPUMem(ctx context.Context, req *pb.OnlineCPUMemReques
 	return emptyResp, nil
 }
 
+func (p *gRPCProxy) StatsContainer(ctx context.Context, req *pb.StatsContainerRequest) (*pb.StatsContainerResponse, error) {
+	return &pb.StatsContainerResponse{}, nil
+}
+
+func (p *gRPCProxy) Check(ctx context.Context, req *pb.CheckRequest) (*pb.HealthCheckResponse, error) {
+	return &pb.HealthCheckResponse{}, nil
+}
+
+func (p *gRPCProxy) Version(ctx context.Context, req *pb.CheckRequest) (*pb.VersionCheckResponse, error) {
+	return &pb.VersionCheckResponse{}, nil
+
+}
+
+func (p *gRPCProxy) PauseContainer(ctx context.Context, req *pb.PauseContainerRequest) (*gpb.Empty, error) {
+	return emptyResp, nil
+}
+
+func (p *gRPCProxy) ResumeContainer(ctx context.Context, req *pb.ResumeContainerRequest) (*gpb.Empty, error) {
+	return emptyResp, nil
+}
+
 func gRPCRegister(s *grpc.Server, srv interface{}) {
 	switch g := srv.(type) {
 	case *gRPCProxy:
 		pb.RegisterAgentServiceServer(s, g)
+		pb.RegisterHealthServer(s, g)
 	}
 }
 
@@ -212,6 +236,9 @@ var reqList = []interface{}{
 	&pb.StartContainerRequest{},
 	&pb.RemoveContainerRequest{},
 	&pb.SignalProcessRequest{},
+	&pb.CheckRequest{},
+	&pb.WaitProcessRequest{},
+	&pb.StatsContainerRequest{},
 }
 
 func TestKataAgentSendReq(t *testing.T) {
@@ -346,7 +373,7 @@ func TestAppendDevicesEmptyContainerDeviceList(t *testing.T) {
 
 	devList := []*pb.Device{}
 	expected := []*pb.Device{}
-	ctrDevices := []Device{}
+	ctrDevices := []api.Device{}
 
 	updatedDevList := k.appendDevices(devList, ctrDevices)
 	assert.True(t, reflect.DeepEqual(updatedDevList, expected),
@@ -361,16 +388,16 @@ func TestAppendDevices(t *testing.T) {
 	expected := []*pb.Device{
 		{
 			Type:          kataBlkDevType,
-			VmPath:        testBlockDeviceVirtPath,
 			ContainerPath: testBlockDeviceCtrPath,
+			Id:            testPCIAddr,
 		},
 	}
-	ctrDevices := []Device{
-		&BlockDevice{
-			VirtPath: testBlockDeviceVirtPath,
-			DeviceInfo: DeviceInfo{
+	ctrDevices := []api.Device{
+		&drivers.BlockDevice{
+			DeviceInfo: config.DeviceInfo{
 				ContainerPath: testBlockDeviceCtrPath,
 			},
+			PCIAddr: testPCIAddr,
 		},
 	}
 
@@ -378,4 +405,140 @@ func TestAppendDevices(t *testing.T) {
 	assert.True(t, reflect.DeepEqual(updatedDevList, expected),
 		"Device lists didn't match: got %+v, expecting %+v",
 		updatedDevList, expected)
+}
+
+func TestConstraintGRPCSpec(t *testing.T) {
+	assert := assert.New(t)
+
+	g := &pb.Spec{
+		Hooks: &pb.Hooks{},
+		Mounts: []pb.Mount{
+			{Destination: "/dev/shm"},
+		},
+		Linux: &pb.Linux{
+			Seccomp: &pb.LinuxSeccomp{},
+			Namespaces: []pb.LinuxNamespace{
+				{
+					Type: specs.NetworkNamespace,
+					Path: "/abc/123",
+				},
+				{
+					Type: specs.MountNamespace,
+					Path: "/abc/123",
+				},
+			},
+			Resources: &pb.LinuxResources{
+				Devices:        []pb.LinuxDeviceCgroup{},
+				Memory:         &pb.LinuxMemory{},
+				CPU:            &pb.LinuxCPU{},
+				Pids:           &pb.LinuxPids{},
+				BlockIO:        &pb.LinuxBlockIO{},
+				HugepageLimits: []pb.LinuxHugepageLimit{},
+				Network:        &pb.LinuxNetwork{},
+			},
+		},
+	}
+
+	constraintGRPCSpec(g)
+
+	// check nil fields
+	assert.Nil(g.Hooks)
+	assert.Nil(g.Linux.Seccomp)
+	assert.Nil(g.Linux.Resources.Devices)
+	assert.Nil(g.Linux.Resources.Memory)
+	assert.Nil(g.Linux.Resources.Pids)
+	assert.Nil(g.Linux.Resources.BlockIO)
+	assert.Nil(g.Linux.Resources.HugepageLimits)
+	assert.Nil(g.Linux.Resources.Network)
+	assert.NotNil(g.Linux.Resources.CPU)
+
+	// check namespaces
+	assert.Len(g.Linux.Namespaces, 1)
+	assert.Empty(g.Linux.Namespaces[0].Path)
+
+	// check mounts
+	assert.Len(g.Mounts, 1)
+	assert.NotEmpty(g.Mounts[0].Destination)
+	assert.NotEmpty(g.Mounts[0].Type)
+	assert.NotEmpty(g.Mounts[0].Source)
+	assert.NotEmpty(g.Mounts[0].Options)
+}
+
+func testIsPidNamespacePresent(grpcSpec *pb.Spec) bool {
+	for _, ns := range grpcSpec.Linux.Namespaces {
+		if ns.Type == string(specs.PIDNamespace) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func TestHandlePidNamespace(t *testing.T) {
+	assert := assert.New(t)
+
+	g := &pb.Spec{
+		Linux: &pb.Linux{
+			Namespaces: []pb.LinuxNamespace{
+				{
+					Type: specs.NetworkNamespace,
+					Path: "/abc/123",
+				},
+				{
+					Type: specs.MountNamespace,
+					Path: "/abc/123",
+				},
+			},
+		},
+	}
+
+	sandbox := &Sandbox{}
+	sandbox.state.Pid = 0
+
+	k := kataAgent{}
+
+	sharedPid, err := k.handlePidNamespace(g, sandbox)
+	assert.Nil(err)
+	assert.False(sharedPid)
+	assert.False(testIsPidNamespacePresent(g))
+
+	pidNs := pb.LinuxNamespace{
+		Type: string(specs.PIDNamespace),
+		Path: "",
+	}
+
+	utsNs := pb.LinuxNamespace{
+		Type: specs.UTSNamespace,
+		Path: "",
+	}
+
+	g.Linux.Namespaces = append(g.Linux.Namespaces, pidNs)
+	g.Linux.Namespaces = append(g.Linux.Namespaces, utsNs)
+
+	sharedPid, err = k.handlePidNamespace(g, sandbox)
+	assert.Nil(err)
+	assert.False(sharedPid)
+	assert.False(testIsPidNamespacePresent(g))
+
+	sandbox.state.Pid = 112
+	pidNs = pb.LinuxNamespace{
+		Type: string(specs.PIDNamespace),
+		Path: "/proc/112/ns/pid",
+	}
+	g.Linux.Namespaces = append(g.Linux.Namespaces, pidNs)
+
+	sharedPid, err = k.handlePidNamespace(g, sandbox)
+	assert.Nil(err)
+	assert.True(sharedPid)
+	assert.False(testIsPidNamespacePresent(g))
+
+	// Arbitrary path
+	pidNs = pb.LinuxNamespace{
+		Type: string(specs.PIDNamespace),
+		Path: "/proc/234/ns/pid",
+	}
+	g.Linux.Namespaces = append(g.Linux.Namespaces, pidNs)
+
+	_, err = k.handlePidNamespace(g, sandbox)
+	assert.NotNil(err)
 }

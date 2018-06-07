@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package main
@@ -50,7 +39,7 @@ const (
 	// small docker image used to create root filesystems from
 	testDockerImage = "busybox"
 
-	testPodID       = "99999999-9999-9999-99999999999999999"
+	testSandboxID   = "99999999-9999-9999-99999999999999999"
 	testContainerID = "1"
 	testBundle      = "bundle"
 )
@@ -109,7 +98,7 @@ func init() {
 	fmt.Printf("INFO: ensuring required docker image (%v) is available\n", testDockerImage)
 
 	// Only hit the network if the image doesn't exist locally
-	_, err = runCommand([]string{"docker", "image", "inspect", testDockerImage})
+	_, err = runCommand([]string{"docker", "inspect", "--type=image", testDockerImage})
 	if err == nil {
 		fmt.Printf("INFO: docker image %v already exists locally\n", testDockerImage)
 	} else {
@@ -449,19 +438,11 @@ func writeOCIConfigFile(spec oci.CompatOCISpec, configPath string) error {
 	return ioutil.WriteFile(configPath, bytes, testFileMode)
 }
 
-func newSingleContainerPodStatusList(podID, containerID string, podState, containerState vc.State, annotations map[string]string) []vc.PodStatus {
-	return []vc.PodStatus{
-		{
-			ID:    podID,
-			State: podState,
-			ContainersStatus: []vc.ContainerStatus{
-				{
-					ID:          containerID,
-					State:       containerState,
-					Annotations: annotations,
-				},
-			},
-		},
+func newSingleContainerStatus(containerID string, containerState vc.State, annotations map[string]string) vc.ContainerStatus {
+	return vc.ContainerStatus{
+		ID:          containerID,
+		State:       containerState,
+		Annotations: annotations,
 	}
 }
 
@@ -1112,4 +1093,19 @@ func TestMainResetCLIGlobals(t *testing.T) {
 	assert.Equal(cli.AppHelpTemplate, savedCLIAppHelpTemplate)
 	assert.NotNil(cli.VersionPrinter)
 	assert.NotNil(savedCLIVersionPrinter)
+}
+
+func createTempContainerIDMapping(containerID, sandboxID string) (string, error) {
+	tmpDir, err := ioutil.TempDir("", "containers-mapping")
+	if err != nil {
+		return "", err
+	}
+	ctrsMapTreePath = tmpDir
+
+	path := filepath.Join(ctrsMapTreePath, containerID, sandboxID)
+	if err := os.MkdirAll(path, 0750); err != nil {
+		return "", err
+	}
+
+	return tmpDir, nil
 }

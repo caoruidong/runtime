@@ -1,22 +1,12 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"reflect"
@@ -411,4 +401,75 @@ func TestNetInterworkingModelSetModel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVhostUserSocketPath(t *testing.T) {
+
+	// First test case: search for existing:
+	addresses := []netlink.Addr{
+		{
+			IPNet: &net.IPNet{
+				IP:   net.IPv4(192, 168, 0, 2),
+				Mask: net.IPv4Mask(192, 168, 0, 2),
+			},
+		},
+		{
+			IPNet: &net.IPNet{
+				IP:   net.IPv4(192, 168, 0, 1),
+				Mask: net.IPv4Mask(192, 168, 0, 1),
+			},
+		},
+	}
+
+	expectedPath := "/tmp/vhostuser_192.168.0.1"
+	expectedFileName := "vhu.sock"
+	expectedResult := fmt.Sprintf("%s/%s", expectedPath, expectedFileName)
+
+	err := os.Mkdir(expectedPath, 0777)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = os.Create(expectedResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	netinfo := NetworkInfo{
+		Addrs: addresses,
+	}
+
+	path, _ := vhostUserSocketPath(netinfo)
+
+	if path != expectedResult {
+		t.Fatalf("Got %+v\nExpecting %+v", path, expectedResult)
+	}
+
+	// Second test case: search doesn't include matching vsock:
+	addressesFalse := []netlink.Addr{
+		{
+			IPNet: &net.IPNet{
+				IP:   net.IPv4(192, 168, 0, 4),
+				Mask: net.IPv4Mask(192, 168, 0, 4),
+			},
+		},
+	}
+	netinfoFail := NetworkInfo{
+		Addrs: addressesFalse,
+	}
+
+	path, _ = vhostUserSocketPath(netinfoFail)
+	if path != "" {
+		t.Fatalf("Got %+v\nExpecting %+v", path, "")
+	}
+
+	err = os.Remove(expectedResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.Remove(expectedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }

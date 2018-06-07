@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package hyperstart
@@ -23,10 +12,10 @@ import (
 // Defines all available commands to communicate with hyperstart agent.
 const (
 	VersionCode = iota
-	StartPodCode
-	GetPodDeprecatedCode
-	StopPodDeprecatedCode
-	DestroyPodCode
+	StartSandboxCode
+	GetSandboxDeprecatedCode
+	StopSandboxDeprecatedCode
+	DestroySandboxCode
 	RestartContainerDeprecatedCode
 	ExecCmdCode
 	FinishCmdDeprecatedCode
@@ -35,7 +24,7 @@ const (
 	ErrorCode
 	WinsizeCode
 	PingCode
-	FinishPodDeprecatedCode
+	FinishSandboxDeprecatedCode
 	NextCode
 	WriteFileCode
 	ReadFileCode
@@ -166,7 +155,7 @@ type Capabilities struct {
 	Ambient []string `json:"ambient"`
 }
 
-// Process describes a process running on a container inside a pod.
+// Process describes a process running on a container inside a sandbox.
 type Process struct {
 	// Args specifies the binary and arguments for the application to execute.
 	Args []string `json:"args"`
@@ -221,7 +210,7 @@ type Constraints struct {
 	CPUShares uint64
 }
 
-// Container describes a container running on a pod.
+// Container describes a container running on a sandbox.
 type Container struct {
 	ID               string              `json:"id"`
 	Rootfs           string              `json:"rootfs"`
@@ -260,8 +249,8 @@ type Route struct {
 	Device  string `json:"device,omitempty"`
 }
 
-// Pod describes the pod configuration to start inside the VM.
-type Pod struct {
+// Sandbox describes the sandbox configuration to start inside the VM.
+type Sandbox struct {
 	Hostname   string         `json:"hostname"`
 	Containers []Container    `json:"containers,omitempty"`
 	Interfaces []NetworkIface `json:"interfaces,omitempty"`

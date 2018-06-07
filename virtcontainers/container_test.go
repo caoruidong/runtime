@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -26,7 +15,7 @@ import (
 	"syscall"
 	"testing"
 
-	vcAnnotations "github.com/containers/virtcontainers/pkg/annotations"
+	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -79,33 +68,33 @@ func TestContainerSystemMountsInfo(t *testing.T) {
 	assert.False(t, c.systemMountsInfo.BindMountDev)
 }
 
-func TestContainerPod(t *testing.T) {
-	expectedPod := &Pod{}
+func TestContainerSandbox(t *testing.T) {
+	expectedSandbox := &Sandbox{}
 
 	container := Container{
-		pod: expectedPod,
+		sandbox: expectedSandbox,
 	}
 
-	pod := container.Pod()
+	sandbox := container.Sandbox()
 
-	if !reflect.DeepEqual(pod, expectedPod) {
-		t.Fatalf("Expecting %+v\nGot %+v", expectedPod, pod)
+	if !reflect.DeepEqual(sandbox, expectedSandbox) {
+		t.Fatalf("Expecting %+v\nGot %+v", expectedSandbox, sandbox)
 	}
 }
 
 func TestContainerRemoveDrive(t *testing.T) {
-	pod := &Pod{}
+	sandbox := &Sandbox{}
 
 	container := Container{
-		pod: pod,
-		id:  "testContainer",
+		sandbox: sandbox,
+		id:      "testContainer",
 	}
 
 	container.state.Fstype = ""
 	err := container.removeDrive()
 
 	// hotplugRemoveDevice for hypervisor should not be called.
-	// test should pass without a hypervisor created for the container's pod.
+	// test should pass without a hypervisor created for the container's sandbox.
 	if err != nil {
 		t.Fatal("")
 	}
@@ -120,7 +109,7 @@ func TestContainerRemoveDrive(t *testing.T) {
 	}
 
 	container.state.HotpluggedDrive = true
-	pod.hypervisor = &mockHypervisor{}
+	sandbox.hypervisor = &mockHypervisor{}
 	err = container.removeDrive()
 
 	if err != nil {
@@ -206,21 +195,27 @@ func TestContainerAddDriveDir(t *testing.T) {
 	}
 
 	fs := &filesystem{}
-	pod := &Pod{
-		id:         testPodID,
+	sandbox := &Sandbox{
+		id:         testSandboxID,
 		storage:    fs,
 		hypervisor: &mockHypervisor{},
+		agent:      &noopAgent{},
+		config: &SandboxConfig{
+			HypervisorConfig: HypervisorConfig{
+				DisableBlockDeviceUse: false,
+			},
+		},
 	}
 
 	contID := "100"
 	container := Container{
-		pod:    pod,
-		id:     contID,
-		rootFs: fakeRootfs,
+		sandbox: sandbox,
+		id:      contID,
+		rootFs:  fakeRootfs,
 	}
 
 	// create state file
-	path := filepath.Join(runStoragePath, testPodID, container.ID())
+	path := filepath.Join(runStoragePath, testSandboxID, container.ID())
 	err = os.MkdirAll(path, dirMode)
 	if err != nil {
 		t.Fatal(err)
@@ -258,39 +253,42 @@ func TestContainerAddDriveDir(t *testing.T) {
 	if container.state.Fstype == "" || !container.state.HotpluggedDrive {
 		t.Fatal()
 	}
-
 }
 
-func TestCheckPodRunningEmptyCmdFailure(t *testing.T) {
+func TestCheckSandboxRunningEmptyCmdFailure(t *testing.T) {
 	c := &Container{}
-	err := c.checkPodRunning("")
+	err := c.checkSandboxRunning("")
 	assert.NotNil(t, err, "Should fail because provided command is empty")
 }
 
-func TestCheckPodRunningNotRunningFailure(t *testing.T) {
+func TestCheckSandboxRunningNotRunningFailure(t *testing.T) {
 	c := &Container{
-		pod: &Pod{},
+		sandbox: &Sandbox{},
 	}
-	err := c.checkPodRunning("test_cmd")
-	assert.NotNil(t, err, "Should fail because pod state is empty")
+	err := c.checkSandboxRunning("test_cmd")
+	assert.NotNil(t, err, "Should fail because sandbox state is empty")
 }
 
-func TestCheckPodRunningSuccessful(t *testing.T) {
+func TestCheckSandboxRunningSuccessful(t *testing.T) {
 	c := &Container{
-		pod: &Pod{
+		sandbox: &Sandbox{
 			state: State{
 				State: StateRunning,
 			},
 		},
 	}
-	err := c.checkPodRunning("test_cmd")
+	err := c.checkSandboxRunning("test_cmd")
 	assert.Nil(t, err, "%v", err)
 }
 
 func TestContainerAddResources(t *testing.T) {
 	assert := assert.New(t)
 
-	c := &Container{}
+	c := &Container{
+		sandbox: &Sandbox{
+			storage: &filesystem{},
+		},
+	}
 	err := c.addResources()
 	assert.Nil(err)
 
@@ -303,11 +301,17 @@ func TestContainerAddResources(t *testing.T) {
 	err = c.addResources()
 	assert.Nil(err)
 
+	vCPUs := uint32(5)
 	c.config.Resources = ContainerResources{
-		CPUQuota:  5000,
-		CPUPeriod: 1000,
+		VCPUs: vCPUs,
 	}
-	c.pod = &Pod{hypervisor: &mockHypervisor{}}
+	c.sandbox = &Sandbox{
+		hypervisor: &mockHypervisor{
+			vCPUs: vCPUs,
+		},
+		agent:   &noopAgent{},
+		storage: &filesystem{},
+	}
 	err = c.addResources()
 	assert.Nil(err)
 }
@@ -315,7 +319,12 @@ func TestContainerAddResources(t *testing.T) {
 func TestContainerRemoveResources(t *testing.T) {
 	assert := assert.New(t)
 
-	c := &Container{}
+	c := &Container{
+		sandbox: &Sandbox{
+			storage: &filesystem{},
+		},
+	}
+
 	err := c.addResources()
 	assert.Nil(err)
 
@@ -328,11 +337,18 @@ func TestContainerRemoveResources(t *testing.T) {
 	err = c.removeResources()
 	assert.Nil(err)
 
+	vCPUs := uint32(5)
 	c.config.Resources = ContainerResources{
-		CPUQuota:  5000,
-		CPUPeriod: 1000,
+		VCPUs: vCPUs,
 	}
-	c.pod = &Pod{hypervisor: &mockHypervisor{}}
+
+	c.sandbox = &Sandbox{
+		hypervisor: &mockHypervisor{
+			vCPUs: vCPUs,
+		},
+		storage: &filesystem{},
+	}
+
 	err = c.removeResources()
 	assert.Nil(err)
 }
@@ -340,7 +356,7 @@ func TestContainerRemoveResources(t *testing.T) {
 func TestContainerEnterErrorsOnContainerStates(t *testing.T) {
 	assert := assert.New(t)
 	c := &Container{
-		pod: &Pod{
+		sandbox: &Sandbox{
 			state: State{
 				State: StateRunning,
 			},
@@ -360,5 +376,102 @@ func TestContainerEnterErrorsOnContainerStates(t *testing.T) {
 	// Container stopped
 	c.state.State = StateStopped
 	_, err = c.enter(cmd)
+	assert.Error(err)
+}
+
+func TestContainerWaitErrorState(t *testing.T) {
+	assert := assert.New(t)
+	c := &Container{
+		sandbox: &Sandbox{
+			state: State{
+				State: StateRunning,
+			},
+		},
+	}
+	processID := "foobar"
+
+	// Container state undefined
+	_, err := c.wait(processID)
+	assert.Error(err)
+
+	// Container paused
+	c.state.State = StatePaused
+	_, err = c.wait(processID)
+	assert.Error(err)
+
+	// Container stopped
+	c.state.State = StateStopped
+	_, err = c.wait(processID)
+	assert.Error(err)
+}
+
+func TestKillContainerErrorState(t *testing.T) {
+	assert := assert.New(t)
+	c := &Container{
+		sandbox: &Sandbox{
+			state: State{
+				State: StateRunning,
+			},
+		},
+	}
+	// Container state undefined
+	err := c.kill(syscall.SIGKILL, true)
+	assert.Error(err)
+
+	// Container stopped
+	c.state.State = StateStopped
+	err = c.kill(syscall.SIGKILL, true)
+	assert.Error(err)
+}
+
+func TestWinsizeProcessErrorState(t *testing.T) {
+	assert := assert.New(t)
+	c := &Container{
+		sandbox: &Sandbox{
+			state: State{
+				State: StateRunning,
+			},
+		},
+	}
+	processID := "foobar"
+
+	// Container state undefined
+	err := c.winsizeProcess(processID, 100, 200)
+	assert.Error(err)
+
+	// Container paused
+	c.state.State = StatePaused
+	err = c.winsizeProcess(processID, 100, 200)
+	assert.Error(err)
+
+	// Container stopped
+	c.state.State = StateStopped
+	err = c.winsizeProcess(processID, 100, 200)
+	assert.Error(err)
+}
+
+func TestProcessIOStream(t *testing.T) {
+	assert := assert.New(t)
+	c := &Container{
+		sandbox: &Sandbox{
+			state: State{
+				State: StateRunning,
+			},
+		},
+	}
+	processID := "foobar"
+
+	// Container state undefined
+	_, _, _, err := c.ioStream(processID)
+	assert.Error(err)
+
+	// Container paused
+	c.state.State = StatePaused
+	_, _, _, err = c.ioStream(processID)
+	assert.Error(err)
+
+	// Container stopped
+	c.state.State = StateStopped
+	_, _, _, err = c.ioStream(processID)
 	assert.Error(err)
 }

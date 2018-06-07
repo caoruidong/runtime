@@ -1,16 +1,7 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -41,7 +32,7 @@ type testRuntimeConfig struct {
 	LogPath           string
 }
 
-func makeRuntimeConfigFileData(hypervisor, hypervisorPath, kernelPath, imagePath, kernelParams, machineType, shimPath, proxyPath, logPath string, disableBlock bool, blockDeviceDriver string) string {
+func makeRuntimeConfigFileData(hypervisor, hypervisorPath, kernelPath, imagePath, kernelParams, machineType, shimPath, proxyPath, logPath string, disableBlock bool, blockDeviceDriver string, enableIOThreads bool) string {
 	return `
 	# Runtime configuration file
 
@@ -53,8 +44,11 @@ func makeRuntimeConfigFileData(hypervisor, hypervisorPath, kernelPath, imagePath
 	image = "` + imagePath + `"
 	machine_type = "` + machineType + `"
 	default_vcpus = ` + strconv.FormatUint(uint64(defaultVCPUCount), 10) + `
+	default_maxvcpus = ` + strconv.FormatUint(uint64(defaultMaxVCPUCount), 10) + `
 	default_memory = ` + strconv.FormatUint(uint64(defaultMemSize), 10) + `
 	disable_block_device_use =  ` + strconv.FormatBool(disableBlock) + `
+	enable_iothreads =  ` + strconv.FormatBool(enableIOThreads) + `
+	msize_9p = ` + strconv.FormatUint(uint64(defaultMsize9p), 10) + `
 
 	[proxy.kata]
 	path = "` + proxyPath + `"
@@ -101,8 +95,9 @@ func createAllRuntimeConfigFiles(dir, hypervisor string) (config testRuntimeConf
 	machineType := "machineType"
 	disableBlockDevice := true
 	blockDeviceDriver := "virtio-scsi"
+	enableIOThreads := true
 
-	runtimeConfigFileData := makeRuntimeConfigFileData(hypervisor, hypervisorPath, kernelPath, imagePath, kernelParams, machineType, shimPath, proxyPath, logPath, disableBlockDevice, blockDeviceDriver)
+	runtimeConfigFileData := makeRuntimeConfigFileData(hypervisor, hypervisorPath, kernelPath, imagePath, kernelParams, machineType, shimPath, proxyPath, logPath, disableBlockDevice, blockDeviceDriver, enableIOThreads)
 
 	configPath := path.Join(dir, "runtime.toml")
 	err = createConfig(configPath, runtimeConfigFileData)
@@ -135,11 +130,14 @@ func createAllRuntimeConfigFiles(dir, hypervisor string) (config testRuntimeConf
 		KernelParams:          vc.DeserializeParams(strings.Fields(kernelParams)),
 		HypervisorMachineType: machineType,
 		DefaultVCPUs:          defaultVCPUCount,
+		DefaultMaxVCPUs:       uint32(goruntime.NumCPU()),
 		DefaultMemSz:          defaultMemSize,
 		DisableBlockDeviceUse: disableBlockDevice,
 		BlockDeviceDriver:     defaultBlockDeviceDriver,
 		DefaultBridges:        defaultBridgesCount,
 		Mlock:                 !defaultEnableSwap,
+		EnableIOThreads:       enableIOThreads,
+		Msize9p:               defaultMsize9p,
 	}
 
 	agentConfig := vc.KataAgentConfig{}
@@ -517,11 +515,13 @@ func TestMinimalRuntimeConfig(t *testing.T) {
 		InitrdPath:            defaultInitrdPath,
 		HypervisorMachineType: defaultMachineType,
 		DefaultVCPUs:          defaultVCPUCount,
+		DefaultMaxVCPUs:       defaultMaxVCPUCount,
 		DefaultMemSz:          defaultMemSize,
 		DisableBlockDeviceUse: defaultDisableBlockDeviceUse,
 		DefaultBridges:        defaultBridgesCount,
 		Mlock:                 !defaultEnableSwap,
 		BlockDeviceDriver:     defaultBlockDeviceDriver,
+		Msize9p:               defaultMsize9p,
 	}
 
 	expectedAgentConfig := vc.KataAgentConfig{}
@@ -569,6 +569,7 @@ func TestNewQemuHypervisorConfig(t *testing.T) {
 	imagePath := path.Join(dir, "image")
 	machineType := "machineType"
 	disableBlock := true
+	enableIOThreads := true
 
 	hypervisor := hypervisor{
 		Path:                  hypervisorPath,
@@ -576,6 +577,7 @@ func TestNewQemuHypervisorConfig(t *testing.T) {
 		Image:                 imagePath,
 		MachineType:           machineType,
 		DisableBlockDeviceUse: disableBlock,
+		EnableIOThreads:       enableIOThreads,
 	}
 
 	files := []string{hypervisorPath, kernelPath, imagePath}
@@ -617,6 +619,47 @@ func TestNewQemuHypervisorConfig(t *testing.T) {
 		t.Errorf("Expected value for disable block usage %v, got %v", disableBlock, config.DisableBlockDeviceUse)
 	}
 
+	if config.EnableIOThreads != enableIOThreads {
+		t.Errorf("Expected value for enable IOThreads  %v, got %v", enableIOThreads, config.EnableIOThreads)
+	}
+
+}
+
+func TestNewQemuHypervisorConfigImageAndInitrd(t *testing.T) {
+	assert := assert.New(t)
+
+	tmpdir, err := ioutil.TempDir(testDir, "")
+	assert.NoError(err)
+	defer os.RemoveAll(tmpdir)
+
+	imagePath := filepath.Join(tmpdir, "image")
+	initrdPath := filepath.Join(tmpdir, "initrd")
+	hypervisorPath := path.Join(tmpdir, "hypervisor")
+	kernelPath := path.Join(tmpdir, "kernel")
+
+	for _, file := range []string{imagePath, initrdPath, hypervisorPath, kernelPath} {
+		err = createEmptyFile(file)
+		assert.NoError(err)
+	}
+
+	machineType := "machineType"
+	disableBlock := true
+	enableIOThreads := true
+
+	hypervisor := hypervisor{
+		Path:                  hypervisorPath,
+		Kernel:                kernelPath,
+		Image:                 imagePath,
+		Initrd:                initrdPath,
+		MachineType:           machineType,
+		DisableBlockDeviceUse: disableBlock,
+		EnableIOThreads:       enableIOThreads,
+	}
+
+	_, err = newQemuHypervisorConfig(hypervisor)
+
+	// specifying both an image+initrd is invalid
+	assert.Error(err)
 }
 
 func TestNewShimConfig(t *testing.T) {
@@ -655,10 +698,13 @@ func TestNewShimConfig(t *testing.T) {
 func TestHypervisorDefaults(t *testing.T) {
 	assert := assert.New(t)
 
+	numCPUs := goruntime.NumCPU()
+
 	h := hypervisor{}
 
 	assert.Equal(h.machineType(), defaultMachineType, "default hypervisor machine type wrong")
 	assert.Equal(h.defaultVCPUs(), defaultVCPUCount, "default vCPU number is wrong")
+	assert.Equal(h.defaultMaxVCPUs(), uint32(numCPUs), "default max vCPU number is wrong")
 	assert.Equal(h.defaultMemSz(), defaultMemSize, "default memory size is wrong")
 
 	machineType := "foo"
@@ -667,14 +713,23 @@ func TestHypervisorDefaults(t *testing.T) {
 
 	// auto inferring
 	h.DefaultVCPUs = -1
-	assert.Equal(h.defaultVCPUs(), uint32(goruntime.NumCPU()), "default vCPU number is wrong")
+	assert.Equal(h.defaultVCPUs(), uint32(numCPUs), "default vCPU number is wrong")
 
 	h.DefaultVCPUs = 2
 	assert.Equal(h.defaultVCPUs(), uint32(2), "default vCPU number is wrong")
 
-	numCPUs := goruntime.NumCPU()
 	h.DefaultVCPUs = int32(numCPUs) + 1
 	assert.Equal(h.defaultVCPUs(), uint32(numCPUs), "default vCPU number is wrong")
+
+	h.DefaultMaxVCPUs = 2
+	assert.Equal(h.defaultMaxVCPUs(), uint32(h.DefaultMaxVCPUs), "default max vCPU number is wrong")
+
+	h.DefaultMaxVCPUs = uint32(numCPUs) + 1
+	assert.Equal(h.defaultMaxVCPUs(), uint32(numCPUs), "default max vCPU number is wrong")
+
+	maxvcpus := vc.MaxQemuVCPUs()
+	h.DefaultMaxVCPUs = uint32(maxvcpus) + 1
+	assert.Equal(h.defaultMaxVCPUs(), uint32(numCPUs), "default max vCPU number is wrong")
 
 	h.DefaultMemSz = 1024
 	assert.Equal(h.defaultMemSz(), uint32(1024), "default memory size is wrong")

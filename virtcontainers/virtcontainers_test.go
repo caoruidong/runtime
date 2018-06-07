@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -27,7 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const testPodID = "7f49d00d-1995-4156-8c79-5f5ab24ce138"
+const testSandboxID = "7f49d00d-1995-4156-8c79-5f5ab24ce138"
 const testContainerID = "containerID"
 const testKernel = "kernel"
 const testInitrd = "initrd"
@@ -39,12 +28,12 @@ const testDisabledAsNonRoot = "Test disabled as requires root privileges"
 
 // package variables set in TestMain
 var testDir = ""
-var podDirConfig = ""
-var podFileConfig = ""
-var podDirState = ""
-var podDirLock = ""
-var podFileState = ""
-var podFileLock = ""
+var sandboxDirConfig = ""
+var sandboxFileConfig = ""
+var sandboxDirState = ""
+var sandboxDirLock = ""
+var sandboxFileState = ""
+var sandboxFileLock = ""
 var testQemuKernelPath = ""
 var testQemuInitrdPath = ""
 var testQemuImagePath = ""
@@ -52,9 +41,10 @@ var testQemuPath = ""
 var testHyperstartCtlSocket = ""
 var testHyperstartTtySocket = ""
 
-// cleanUp Removes any stale pod/container state that can affect
+// cleanUp Removes any stale sandbox/container state that can affect
 // the next test to run.
 func cleanUp() {
+	globalSandboxList.removeSandbox(testSandboxID)
 	for _, dir := range []string{testDir, defaultSharedDir} {
 		os.RemoveAll(dir)
 		os.MkdirAll(dir, dirMode)
@@ -85,7 +75,7 @@ func TestMain(m *testing.M) {
 	}
 	SetLogger(logger)
 
-	testDir, err = ioutil.TempDir("", "virtcontainers-tmp-")
+	testDir, err = ioutil.TempDir("", "vc-tmp-")
 	if err != nil {
 		panic(err)
 	}
@@ -129,12 +119,12 @@ func TestMain(m *testing.M) {
 	runStoragePath = filepath.Join(testDir, storagePathSuffix, "run")
 
 	// set now that configStoragePath has been overridden.
-	podDirConfig = filepath.Join(configStoragePath, testPodID)
-	podFileConfig = filepath.Join(configStoragePath, testPodID, configFile)
-	podDirState = filepath.Join(runStoragePath, testPodID)
-	podDirLock = filepath.Join(runStoragePath, testPodID)
-	podFileState = filepath.Join(runStoragePath, testPodID, stateFile)
-	podFileLock = filepath.Join(runStoragePath, testPodID, lockFileName)
+	sandboxDirConfig = filepath.Join(configStoragePath, testSandboxID)
+	sandboxFileConfig = filepath.Join(configStoragePath, testSandboxID, configFile)
+	sandboxDirState = filepath.Join(runStoragePath, testSandboxID)
+	sandboxDirLock = filepath.Join(runStoragePath, testSandboxID)
+	sandboxFileState = filepath.Join(runStoragePath, testSandboxID, stateFile)
+	sandboxFileLock = filepath.Join(runStoragePath, testSandboxID, lockFileName)
 
 	testQemuKernelPath = filepath.Join(testDir, testKernel)
 	testQemuInitrdPath = filepath.Join(testDir, testInitrd)

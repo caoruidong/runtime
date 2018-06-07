@@ -25,6 +25,7 @@ format: |
      commit: "<commit>"
      version: "<version>"
      release: "<version>"
+     branch: "<git-branch>"
      meta:
        <key-1>: "<value-1>"
        <key-n>: "<value-n>"
@@ -45,7 +46,8 @@ format: |
   - A section MAY define a "meta" section to store additional
     information about a project or group.
 
-  - Each entry MUST specify ATLEAST one of "commit", "version" and "release".
+  - Each entry MUST specify ATLEAST one of "commit", "version", "release"
+    and "branch".
 
   - WARNING: Gotcha alert! Remember to double-quote all strings
     (except multi-line strings)! This avoids the possibility of a
@@ -57,6 +59,12 @@ assets:
 
   hypervisor:
     description: "Component used to create virtual machines"
+
+    qemu-lite:
+      description: "lightweight VMM that uses KVM"
+      url: "https://github.com/kata-containers/qemu"
+      branch: "qemu-lite-2.11.0"
+      commit: "6ba2bfbee9a80bfd03605c5eb2ca743c8b68389e"
 
     qemu:
       description: "VMM that uses KVM"
@@ -72,11 +80,19 @@ assets:
     meta:
       image-type: "clearlinux"
 
+  initrd:
+    description: |
+      Root filesystem initrd used to boot the guest virtual
+      machine.
+    url: "https://github.com/kata-containers/osbuilder"
+    meta:
+      base-os: "alpine"
+      os-version: "3.7"
+
   kernel:
     description: "Linux kernel optimised for virtual machines"
-    url: "https://github.com/kata-containers/linux"
-    version: "v4.14.22-86.container"
-    release: "19790"
+    url: "https://cdn.kernel.org/pub/linux/kernel/v4.x/"
+    version: "v4.14.22"
 
 components:
   description: "Core system functionality"
@@ -95,7 +111,17 @@ externals:
     description: |
       OCI-based Kubernetes Container Runtime Interface implementation
     url: "https://github.com/kubernetes-incubator/cri-o"
-    version: "v1.9.10"
+    version: "393429d5961ea1f14ff21265b534e98ad2ac40fc"
+    meta:
+      openshift: "v1.9.11"
+
+  cri-containerd:
+    description: |
+      Containerd Plugin for Kubernetes Container Runtime Interface
+    url: "https://github.com/containerd/cri"
+    version: "v1.0.0"
+    meta:
+      containerd-version: "1.1.0"
 
   docker:
     description: "Moby project container manager"
@@ -105,18 +131,23 @@ externals:
     meta:
       swarm-version: "1.12.1"
 
+  gometalinter:
+    description: "utility to run various golang linters"
+    url: "https://github.com/alecthomas/gometalinter"
+    version: "v2.0.5"
+
   kubernetes:
     description: "Kubernetes project container manager"
     url: "https://github.com/kubernetes/kubernetes"
-    version: "1.9.3-00"
+    version: "1.10.0-00"
 
   openshift:
     description: |
       Distribution of Kubernetes optimized for continuous application
       development and multi-tenant deployment.
     url: "https://github.com/openshift/origin"
-    version: "v3.7.1"
-    commit: "ab0f056"
+    version: "v3.9.0"
+    commit: "191fece"
 
   runc:
     description: "OCI CLI reference runtime implementation"

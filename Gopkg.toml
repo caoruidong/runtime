@@ -56,11 +56,11 @@
 
 [[constraint]]
   name = "github.com/intel/govmm"
-  revision = "82c67ab9b21e8cd0042b6c2d3be2d3705a511603"
+  revision = "9cf8ce6c6dda19d4a6d529e73714e231f6156820"
 
 [[constraint]]
   name = "github.com/kata-containers/agent"
-  revision = "a93071539feee29bfa22b6184380d3fd7c156ef7"
+  revision = "f6db83c952e3042ed7b527a1bd576e6b888f4f75"
 
 [[constraint]]
   name = "github.com/containerd/cri-containerd"
@@ -74,3 +74,7 @@
   non-go = true
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/hashicorp/yamux"

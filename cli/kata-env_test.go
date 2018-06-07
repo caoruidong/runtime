@@ -1,16 +1,7 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -69,6 +60,7 @@ func makeRuntimeConfig(prefixDir string) (configFile string, config oci.RuntimeC
 	proxyPath := filepath.Join(prefixDir, "proxy")
 	disableBlock := true
 	blockStorageDriver := "virtio-scsi"
+	enableIOThreads := true
 
 	// override
 	defaultProxyPath = proxyPath
@@ -112,7 +104,9 @@ func makeRuntimeConfig(prefixDir string) (configFile string, config oci.RuntimeC
 		testProxyURL,
 		logPath,
 		disableBlock,
-		blockStorageDriver)
+		blockStorageDriver,
+		enableIOThreads,
+	)
 
 	configFile = path.Join(prefixDir, "runtime.toml")
 	err = createConfig(configFile, runtimeConfig)
@@ -154,8 +148,7 @@ func getExpectedShimDetails(config oci.RuntimeConfig) (ShimInfo, error) {
 
 func getExpectedAgentDetails(config oci.RuntimeConfig) (AgentInfo, error) {
 	return AgentInfo{
-		Type:    string(config.AgentType),
-		Version: unknown,
+		Type: string(config.AgentType),
 	}, nil
 }
 
@@ -212,9 +205,13 @@ VERSION_ID="%s"
 `, expectedDistro.Name, expectedDistro.Version)
 
 	procCPUInfoContents := fmt.Sprintf(`
-vendor_id	: %s
-model name	: %s
-`, expectedCPU.Vendor, expectedCPU.Model)
+%s	: %s
+%s	: %s
+`,
+		archCPUVendorField,
+		expectedCPU.Vendor,
+		archCPUModelField,
+		expectedCPU.Model)
 
 	data := []filesToCreate{
 		{procVersion, procVersionContents},
@@ -238,6 +235,7 @@ func getExpectedHypervisor(config oci.RuntimeConfig) HypervisorInfo {
 		Path:              config.HypervisorConfig.HypervisorPath,
 		MachineType:       config.HypervisorConfig.HypervisorMachineType,
 		BlockDeviceDriver: config.HypervisorConfig.BlockDeviceDriver,
+		Msize9p:           config.HypervisorConfig.Msize9p,
 	}
 }
 
@@ -702,8 +700,7 @@ func testEnvShowSettings(t *testing.T, tmpdir string, tmpfile *os.File) error {
 	}
 
 	agent := AgentInfo{
-		Type:    "agent-type",
-		Version: "agent-version",
+		Type: "agent-type",
 	}
 
 	expectedHostDetails, err := getExpectedHostDetails(tmpdir)

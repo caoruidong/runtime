@@ -1,17 +1,8 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -48,9 +39,9 @@ var startCLICommand = cli.Command{
 	},
 }
 
-func start(containerID string) (vc.VCPod, error) {
+func start(containerID string) (vc.VCSandbox, error) {
 	// Checks the MUST and MUST NOT from OCI runtime specification
-	status, podID, err := getExistingContainerInfo(containerID)
+	status, sandboxID, err := getExistingContainerInfo(containerID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,14 +53,14 @@ func start(containerID string) (vc.VCPod, error) {
 		return nil, err
 	}
 
-	if containerType.IsPod() {
-		return vci.StartPod(podID)
+	if containerType.IsSandbox() {
+		return vci.StartSandbox(sandboxID)
 	}
 
-	c, err := vci.StartContainer(podID, containerID)
+	c, err := vci.StartContainer(sandboxID, containerID)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.Pod(), nil
+	return c.Sandbox(), nil
 }

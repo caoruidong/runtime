@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package hyperstart
@@ -32,15 +21,15 @@ import (
 // Need to be in sync with hyperstart/src/api.h
 const (
 	Version         = "version"
-	StartPod        = "startpod"
-	DestroyPod      = "destroypod"
+	StartSandbox    = "startsandbox"
+	DestroySandbox  = "destroysandbox"
 	ExecCmd         = "execcmd"
 	Ready           = "ready"
 	Ack             = "ack"
 	Error           = "error"
 	WinSize         = "winsize"
 	Ping            = "ping"
-	FinishPod       = "finishpod"
+	FinishSandbox   = "finishsandbox"
 	Next            = "next"
 	WriteFile       = "writefile"
 	ReadFile        = "readfile"
@@ -57,8 +46,8 @@ const (
 // and its corresponding code.
 var CodeList = map[string]uint32{
 	Version:         VersionCode,
-	StartPod:        StartPodCode,
-	DestroyPod:      DestroyPodCode,
+	StartSandbox:    StartSandboxCode,
+	DestroySandbox:  DestroySandboxCode,
 	ExecCmd:         ExecCmdCode,
 	Ready:           ReadyCode,
 	Ack:             AckCode,

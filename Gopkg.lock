@@ -38,12 +38,6 @@
   revision = "7f98c94613021d8b57acfa1a2f0c8d0f6fd7ae5a"
 
 [[projects]]
-  name = "github.com/containers/virtcontainers"
-  packages = ["pkg/annotations"]
-  revision = "79fc80723a20cc5067ed962fede4c1d6f35f7473"
-  version = "1.0.8"
-
-[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -53,7 +47,13 @@
   branch = "master"
   name = "github.com/dlespiau/covertool"
   packages = ["pkg/cover"]
-  revision = "d45792f23e9014540f89404081285a1b4d097234"
+  revision = "b0c4c6d0583aae4e3b5d12b6ec47767670548cc4"
+
+[[projects]]
+  name = "github.com/docker/go-units"
+  packages = ["."]
+  revision = "47565b4f722fb6ceae66b95f853feed578a4a51c"
+  version = "v0.3.3"
 
 [[projects]]
   name = "github.com/go-ini/ini"
@@ -84,9 +84,14 @@
   version = "v1.0.0"
 
 [[projects]]
+  name = "github.com/hashicorp/yamux"
+  packages = ["."]
+  revision = "f5742cb6b85602e7fa834e9d5d91a7d7fa850824"
+
+[[projects]]
   name = "github.com/intel/govmm"
   packages = ["qemu"]
-  revision = "82c67ab9b21e8cd0042b6c2d3be2d3705a511603"
+  revision = "9cf8ce6c6dda19d4a6d529e73714e231f6156820"
 
 [[projects]]
   name = "github.com/kata-containers/agent"
@@ -94,7 +99,7 @@
     "protocols/client",
     "protocols/grpc"
   ]
-  revision = "a93071539feee29bfa22b6184380d3fd7c156ef7"
+  revision = "f6db83c952e3042ed7b527a1bd576e6b888f4f75"
 
 [[projects]]
   name = "github.com/kubernetes-incubator/cri-o"
@@ -115,6 +120,8 @@
   name = "github.com/opencontainers/runc"
   packages = [
     "libcontainer/configs",
+    "libcontainer/seccomp",
+    "libcontainer/specconv",
     "libcontainer/utils"
   ]
   revision = "0351df1c5a66838d0c392b4ac4cf9450de844e2d"
@@ -134,6 +141,12 @@
   name = "github.com/safchain/ethtool"
   packages = ["."]
   revision = "79559b488d8848b53a8e34c330140c3fc37ee246"
+
+[[projects]]
+  name = "github.com/seccomp/libseccomp-golang"
+  packages = ["."]
+  revision = "e3496e3a417d1dc9ecdceca5af2513271fed37a0"
+  version = "v0.9.0"
 
 [[projects]]
   name = "github.com/sirupsen/logrus"
@@ -250,6 +263,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bb2ac1696f8e90526e492a6d54362549094fa844c17fbd06c727198bff6667ef"
+  inputs-digest = "a8e90901b945488c3b660e20c076fce3345dba96b4ec15e7ca00b8a06baa16a3"
   solver-name = "gps-cdcl"
   solver-version = 1

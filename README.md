@@ -14,11 +14,16 @@ For details of the other Kata Containers repositories, see the
 * [License](#license)
 * [Platform support](#platform-support)
     * [Hardware requirements](#hardware-requirements)
+* [Quick start for users](#quick-start-for-users)
 * [Quick start for developers](#quick-start-for-developers)
+* [Architecture overview](#architecture-overview)
 * [Configuration](#configuration)
 * [Logging](#logging)
 * [Debugging](#debugging)
+* [Limitations](#limitations)
 * [Community](#community)
+    * [Contact](#contact)
+* [Further information](#further-information)
 
 ## Introduction
 
@@ -28,9 +33,11 @@ For details of the other Kata Containers repositories, see the
 package to provide a high-performance standards-compliant runtime that creates
 hardware-virtualized containers.
 
-The runtime is both
-[OCI](https://github.com/opencontainers/runtime-spec)-compatible and
-[CRI-O](https://github.com/kubernetes-incubator/cri-o)-compatible, allowing it
+The runtime is
+[OCI](https://github.com/opencontainers/runtime-spec)-compatible,
+[CRI-O](https://github.com/kubernetes-incubator/cri-o)-compatible, and
+[Containerd](https://github.com/containerd/containerd)-compatible,
+ allowing it
 to work seamlessly with both Docker and Kubernetes respectively.
 
 ## License
@@ -65,10 +72,20 @@ $ kata-runtime kata-check
 > $ sudo kata-runtime kata-check
 > ```
 
+## Quick start for users
+
+See the [installation guides](https://github.com/kata-containers/documentation/tree/master/install/README.md)
+available for various operating systems.
+
 ## Quick start for developers
 
 See the
 [developer guide](https://github.com/kata-containers/documentation/blob/master/Developer-Guide.md).
+
+## Architecture overview
+
+See the [architecture overview](https://github.com/kata-containers/documentation/blob/master/architecture.md)
+for details on the Kata Containers design.
 
 ## Configuration
 
@@ -133,6 +150,23 @@ tool.
 See the
 [debugging section of the developer guide](https://github.com/kata-containers/documentation/blob/master/Developer-Guide.md#enable-full-debug).
 
+## Limitations
+
+See the
+[limitations file](https://github.com/kata-containers/documentation/blob/master/Limitations.md)
+for further details.
+
 ## Community
 
 See [the community repository](https://github.com/kata-containers/community).
+
+### Contact
+
+See [how to reach the community](https://github.com/kata-containers/community/blob/master/CONTRIBUTING.md#contact).
+
+## Further information
+
+See the
+[project table of contents](https://github.com/kata-containers/kata-containers)
+and the
+[documentation repository](https://github.com/kata-containers/documentation).

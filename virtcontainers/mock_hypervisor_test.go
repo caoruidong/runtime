@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -24,8 +13,8 @@ import (
 func TestMockHypervisorInit(t *testing.T) {
 	var m *mockHypervisor
 
-	pod := &Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			HypervisorConfig: HypervisorConfig{
 				KernelPath:     "",
 				ImagePath:      "",
@@ -35,52 +24,52 @@ func TestMockHypervisorInit(t *testing.T) {
 	}
 
 	// wrong config
-	if err := m.init(pod); err == nil {
+	if err := m.init(sandbox); err == nil {
 		t.Fatal()
 	}
 
-	pod.config.HypervisorConfig = HypervisorConfig{
+	sandbox.config.HypervisorConfig = HypervisorConfig{
 		KernelPath:     fmt.Sprintf("%s/%s", testDir, testKernel),
 		ImagePath:      fmt.Sprintf("%s/%s", testDir, testImage),
 		HypervisorPath: fmt.Sprintf("%s/%s", testDir, testHypervisor),
 	}
 
 	// right config
-	if err := m.init(pod); err != nil {
+	if err := m.init(sandbox); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestMockHypervisorCreatePod(t *testing.T) {
+func TestMockHypervisorCreateSandbox(t *testing.T) {
 	var m *mockHypervisor
 
-	config := PodConfig{}
+	config := SandboxConfig{}
 
-	if err := m.createPod(config); err != nil {
+	if err := m.createSandbox(config); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestMockHypervisorStartPod(t *testing.T) {
+func TestMockHypervisorStartSandbox(t *testing.T) {
 	var m *mockHypervisor
 
-	if err := m.startPod(); err != nil {
+	if err := m.startSandbox(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestMockHypervisorWaitPod(t *testing.T) {
+func TestMockHypervisorWaitSandbox(t *testing.T) {
 	var m *mockHypervisor
 
-	if err := m.waitPod(0); err != nil {
+	if err := m.waitSandbox(0); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestMockHypervisorStopPod(t *testing.T) {
+func TestMockHypervisorStopSandbox(t *testing.T) {
 	var m *mockHypervisor
 
-	if err := m.stopPod(); err != nil {
+	if err := m.stopSandbox(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -93,12 +82,17 @@ func TestMockHypervisorAddDevice(t *testing.T) {
 	}
 }
 
-func TestMockHypervisorGetPodConsole(t *testing.T) {
+func TestMockHypervisorGetSandboxConsole(t *testing.T) {
 	var m *mockHypervisor
 
 	expected := ""
 
-	if result := m.getPodConsole("testPodID"); result != expected {
+	result, err := m.getSandboxConsole("testSandboxID")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result != expected {
 		t.Fatalf("Got %s\nExpecting %s", result, expected)
 	}
 }

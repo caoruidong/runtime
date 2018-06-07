@@ -61,6 +61,12 @@ ifeq (,$(installing))
     EXTRA_DEPS = clean
 endif
 
+ifeq (uncompressed,$(KERNELTYPE))
+    KERNEL_NAME = vmlinux.container
+else
+    KERNEL_NAME = vmlinuz.container
+endif
+
 LIBEXECDIR := $(PREFIX)/libexec
 SHAREDIR := $(PREFIX)/share
 DEFAULTSDIR := $(SHAREDIR)/defaults
@@ -77,7 +83,7 @@ PKGLIBDIR := $(LOCALSTATEDIR)/lib/$(PROJECT_DIR)
 PKGRUNDIR := $(LOCALSTATEDIR)/run/$(PROJECT_DIR)
 PKGLIBEXECDIR := $(LIBEXECDIR)/$(PROJECT_DIR)
 
-KERNELPATH := $(PKGDATADIR)/vmlinuz.container
+KERNELPATH := $(PKGDATADIR)/$(KERNEL_NAME)
 INITRDPATH := $(PKGDATADIR)/$(INITRDNAME)
 IMAGEPATH := $(PKGDATADIR)/$(IMAGENAME)
 FIRMWAREPATH :=
@@ -92,6 +98,8 @@ PROXYPATH := $(PKGLIBEXECDIR)/$(PROXYCMD)
 
 # Default number of vCPUs
 DEFVCPUS := 1
+# Default maximum number of vCPUs
+DEFMAXVCPUS := 0
 # Default memory size in MiB
 DEFMEMSZ := 2048
 #Default number of bridges
@@ -101,11 +109,13 @@ DEFNETWORKMODEL := macvtap
 
 DEFDISABLEBLOCK := false
 DEFBLOCKSTORAGEDRIVER := virtio-scsi
+DEFENABLEIOTHREADS := false
 DEFENABLEMEMPREALLOC := false
 DEFENABLEHUGEPAGES := false
 DEFENABLESWAP := false
 DEFENABLEDEBUG := false
 DEFDISABLENESTINGCHECKS := false
+DEFMSIZE9P := 8192
 
 SED = sed
 
@@ -146,6 +156,7 @@ USER_VARS += INITRDNAME
 USER_VARS += INITRDPATH
 USER_VARS += MACHINETYPE
 USER_VARS += KERNELPATH
+USER_VARS += KERNELTYPE
 USER_VARS += FIRMWAREPATH
 USER_VARS += MACHINEACCELERATORS
 USER_VARS += KERNELPARAMS
@@ -167,16 +178,19 @@ USER_VARS += SHAREDIR
 USER_VARS += SHIMPATH
 USER_VARS += SYSCONFDIR
 USER_VARS += DEFVCPUS
+USER_VARS += DEFMAXVCPUS
 USER_VARS += DEFMEMSZ
 USER_VARS += DEFBRIDGES
 USER_VARS += DEFNETWORKMODEL
 USER_VARS += DEFDISABLEBLOCK
 USER_VARS += DEFBLOCKSTORAGEDRIVER
+USER_VARS += DEFENABLEIOTHREADS
 USER_VARS += DEFENABLEMEMPREALLOC
 USER_VARS += DEFENABLEHUGEPAGES
 USER_VARS += DEFENABLESWAP
 USER_VARS += DEFENABLEDEBUG
 USER_VARS += DEFDISABLENESTINGCHECKS
+USER_VARS += DEFMSIZE9P
 
 V              = @
 Q              = $(V:1=)
@@ -258,16 +272,19 @@ const defaultMachineType = "$(MACHINETYPE)"
 const defaultRootDirectory = "$(PKGRUNDIR)"
 
 const defaultVCPUCount uint32 = $(DEFVCPUS)
+const defaultMaxVCPUCount uint32 = $(DEFMAXVCPUS)
 const defaultMemSize uint32 = $(DEFMEMSZ) // MiB
 const defaultBridgesCount uint32 = $(DEFBRIDGES)
 const defaultInterNetworkingModel = "$(DEFNETWORKMODEL)"
 const defaultDisableBlockDeviceUse bool = $(DEFDISABLEBLOCK)
 const defaultBlockDeviceDriver = "$(DEFBLOCKSTORAGEDRIVER)"
+const defaultEnableIOThreads bool = $(DEFENABLEIOTHREADS)
 const defaultEnableMemPrealloc bool = $(DEFENABLEMEMPREALLOC)
 const defaultEnableHugePages bool = $(DEFENABLEHUGEPAGES)
 const defaultEnableSwap bool = $(DEFENABLESWAP)
 const defaultEnableDebug bool = $(DEFENABLEDEBUG)
 const defaultDisableNestingChecks bool = $(DEFDISABLENESTINGCHECKS)
+const defaultMsize9p uint32 = $(DEFMSIZE9P)
 
 // Default config file used by stateless systems.
 var defaultRuntimeConfiguration = "$(DESTCONFIG)"
@@ -341,16 +358,19 @@ $(GENERATED_FILES): %: %.in Makefile VERSION
 		-e "s|@MACHINETYPE@|$(MACHINETYPE)|g" \
 		-e "s|@SHIMPATH@|$(SHIMPATH)|g" \
 		-e "s|@DEFVCPUS@|$(DEFVCPUS)|g" \
+		-e "s|@DEFMAXVCPUS@|$(DEFMAXVCPUS)|g" \
 		-e "s|@DEFMEMSZ@|$(DEFMEMSZ)|g" \
 		-e "s|@DEFBRIDGES@|$(DEFBRIDGES)|g" \
 		-e "s|@DEFNETWORKMODEL@|$(DEFNETWORKMODEL)|g" \
 		-e "s|@DEFDISABLEBLOCK@|$(DEFDISABLEBLOCK)|g" \
 		-e "s|@DEFBLOCKSTORAGEDRIVER@|$(DEFBLOCKSTORAGEDRIVER)|g" \
+		-e "s|@DEFENABLEIOTHREADS@|$(DEFENABLEIOTHREADS)|g" \
 		-e "s|@DEFENABLEMEMPREALLOC@|$(DEFENABLEMEMPREALLOC)|g" \
 		-e "s|@DEFENABLEHUGEPAGES@|$(DEFENABLEHUGEPAGES)|g" \
 		-e "s|@DEFENABLEMSWAP@|$(DEFENABLESWAP)|g" \
 		-e "s|@DEFENABLEDEBUG@|$(DEFENABLEDEBUG)|g" \
 		-e "s|@DEFDISABLENESTINGCHECKS@|$(DEFDISABLENESTINGCHECKS)|g" \
+		-e "s|@DEFMSIZE9P@|$(DEFMSIZE9P)|g" \
 		$< > $@
 
 generate-config: $(CONFIG)
@@ -369,11 +389,11 @@ check-go-static:
 coverage:
 	$(QUIET_TEST).ci/go-test.sh html-coverage
 
-install: default install-scripts
+install: default runtime install-scripts
 	$(QUIET_INST)install -D $(TARGET) $(DESTTARGET)
 	$(QUIET_INST)install -D $(CONFIG) $(DESTCONFIG)
 
-install-scripts:
+install-scripts: $(SCRIPTS)
 	$(foreach f,$(SCRIPTS),$(call INSTALL_EXEC,$f,$(SCRIPTS_DIR)))
 
 clean:

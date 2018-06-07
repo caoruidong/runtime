@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -22,8 +11,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 
+	vcAnnotations "github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -48,14 +39,17 @@ func (h *Hooks) Logger() *logrus.Entry {
 	return virtLog.WithField("subsystem", "hooks")
 }
 
-func buildHookState(processID int) specs.State {
+func buildHookState(processID int, s *Sandbox) specs.State {
+	annotations := s.GetAnnotations()
 	return specs.State{
-		Pid: processID,
+		Pid:    processID,
+		Bundle: annotations[vcAnnotations.BundlePathKey],
+		ID:     s.id,
 	}
 }
 
-func (h *Hook) runHook() error {
-	state := buildHookState(os.Getpid())
+func (h *Hook) runHook(s *Sandbox) error {
+	state := buildHookState(os.Getpid(), s)
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -82,9 +76,11 @@ func (h *Hook) runHook() error {
 			return fmt.Errorf("%s: stdout: %s, stderr: %s", err, stdout.String(), stderr.String())
 		}
 	} else {
-		done := make(chan error)
-
-		go func() { done <- cmd.Wait() }()
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+			close(done)
+		}()
 
 		select {
 		case err := <-done:
@@ -92,6 +88,10 @@ func (h *Hook) runHook() error {
 				return fmt.Errorf("%s: stdout: %s, stderr: %s", err, stdout.String(), stderr.String())
 			}
 		case <-time.After(time.Duration(h.Timeout) * time.Second):
+			if err := syscall.Kill(cmd.Process.Pid, syscall.SIGKILL); err != nil {
+				return err
+			}
+
 			return fmt.Errorf("Hook timeout")
 		}
 	}
@@ -99,13 +99,13 @@ func (h *Hook) runHook() error {
 	return nil
 }
 
-func (h *Hooks) preStartHooks() error {
+func (h *Hooks) preStartHooks(s *Sandbox) error {
 	if len(h.PreStartHooks) == 0 {
 		return nil
 	}
 
 	for _, hook := range h.PreStartHooks {
-		err := hook.runHook()
+		err := hook.runHook(s)
 		if err != nil {
 			h.Logger().WithFields(logrus.Fields{
 				"hook-type": "pre-start",
@@ -119,13 +119,13 @@ func (h *Hooks) preStartHooks() error {
 	return nil
 }
 
-func (h *Hooks) postStartHooks() error {
+func (h *Hooks) postStartHooks(s *Sandbox) error {
 	if len(h.PostStartHooks) == 0 {
 		return nil
 	}
 
 	for _, hook := range h.PostStartHooks {
-		err := hook.runHook()
+		err := hook.runHook(s)
 		if err != nil {
 			// In case of post start hook, the error is not fatal,
 			// just need to be logged.
@@ -139,13 +139,13 @@ func (h *Hooks) postStartHooks() error {
 	return nil
 }
 
-func (h *Hooks) postStopHooks() error {
+func (h *Hooks) postStopHooks(s *Sandbox) error {
 	if len(h.PostStopHooks) == 0 {
 		return nil
 	}
 
 	for _, hook := range h.PostStopHooks {
-		err := hook.runHook()
+		err := hook.runHook(s)
 		if err != nil {
 			// In case of post stop hook, the error is not fatal,
 			// just need to be logged.

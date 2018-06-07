@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2018 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -20,8 +9,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 
 	govmmQemu "github.com/intel/govmm/qemu"
+
+	"github.com/kata-containers/runtime/virtcontainers/device/api"
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
+	"github.com/kata-containers/runtime/virtcontainers/utils"
 )
 
 type qemuArch interface {
@@ -48,7 +42,7 @@ type qemuArch interface {
 	bridges(number uint32) []Bridge
 
 	// cpuTopology returns the CPU topology for the given amount of vcpus
-	cpuTopology(vcpus uint32) govmmQemu.SMP
+	cpuTopology(vcpus, maxvcpus uint32) govmmQemu.SMP
 
 	// cpuModel returns the CPU model for the machine type
 	cpuModel() string
@@ -66,7 +60,7 @@ type qemuArch interface {
 	appendImage(devices []govmmQemu.Device, path string) ([]govmmQemu.Device, error)
 
 	// appendSCSIController appens a SCSI controller to devices
-	appendSCSIController(devices []govmmQemu.Device) []govmmQemu.Device
+	appendSCSIController(devices []govmmQemu.Device, enableIOThreads bool) ([]govmmQemu.Device, *govmmQemu.IOThread)
 
 	// appendBridges appends bridges to devices
 	appendBridges(devices []govmmQemu.Device, bridges []Bridge) []govmmQemu.Device
@@ -81,13 +75,16 @@ type qemuArch interface {
 	appendNetwork(devices []govmmQemu.Device, endpoint Endpoint) []govmmQemu.Device
 
 	// appendBlockDevice appends a block drive to devices
-	appendBlockDevice(devices []govmmQemu.Device, drive Drive) []govmmQemu.Device
+	appendBlockDevice(devices []govmmQemu.Device, drive drivers.Drive) []govmmQemu.Device
 
 	// appendVhostUserDevice appends a vhost user device to devices
-	appendVhostUserDevice(devices []govmmQemu.Device, vhostUserDevice VhostUserDevice) []govmmQemu.Device
+	appendVhostUserDevice(devices []govmmQemu.Device, vhostUserDevice api.VhostUserDevice) []govmmQemu.Device
 
 	// appendVFIODevice appends a VFIO device to devices
-	appendVFIODevice(devices []govmmQemu.Device, vfioDevice VFIODevice) []govmmQemu.Device
+	appendVFIODevice(devices []govmmQemu.Device, vfioDevice drivers.VFIODevice) []govmmQemu.Device
+
+	// handleImagePath handles the Hypervisor Config image path
+	handleImagePath(config HypervisorConfig)
 }
 
 type qemuArchBase struct {
@@ -108,7 +105,14 @@ const (
 	defaultCPUModel         = "host"
 	defaultBridgeBus        = "pcie.0"
 	maxDevIDSize            = 31
+	defaultMsize9p          = 8192
 )
+
+// This is the PCI start address assigned to the first bridge that
+// is added on the qemu command line. In case of x86_64, the first two PCI
+// addresses (0 and 1) are used by the platform while in case of ARM, address
+// 0 is reserved.
+const bridgePCIStartAddr = 2
 
 const (
 	// VirtioBlock means use virtio-blk for hotplugging drives
@@ -130,6 +134,9 @@ const (
 
 	// QemuVirt is the QEMU virt machine type for aarch64
 	QemuVirt = "virt"
+
+	// QemuPseries is a QEMU virt machine type for for ppc64le
+	QemuPseries = "pseries"
 )
 
 // kernelParamsNonDebug is a list of the default kernel
@@ -218,13 +225,13 @@ func (q *qemuArchBase) bridges(number uint32) []Bridge {
 	return bridges
 }
 
-func (q *qemuArchBase) cpuTopology(vcpus uint32) govmmQemu.SMP {
+func (q *qemuArchBase) cpuTopology(vcpus, maxvcpus uint32) govmmQemu.SMP {
 	smp := govmmQemu.SMP{
 		CPUs:    vcpus,
 		Sockets: vcpus,
 		Cores:   defaultCores,
 		Threads: defaultThreads,
-		MaxCPUs: defaultMaxQemuVCPUs,
+		MaxCPUs: maxvcpus,
 	}
 
 	return smp
@@ -284,14 +291,14 @@ func (q *qemuArchBase) appendImage(devices []govmmQemu.Device, path string) ([]g
 		return nil, err
 	}
 
-	randBytes, err := generateRandomBytes(8)
+	randBytes, err := utils.GenerateRandomBytes(8)
 	if err != nil {
 		return nil, err
 	}
 
-	id := makeNameID("image", hex.EncodeToString(randBytes))
+	id := utils.MakeNameID("image", hex.EncodeToString(randBytes), maxDevIDSize)
 
-	drive := Drive{
+	drive := drivers.Drive{
 		File:   path,
 		Format: "raw",
 		ID:     id,
@@ -300,15 +307,27 @@ func (q *qemuArchBase) appendImage(devices []govmmQemu.Device, path string) ([]g
 	return q.appendBlockDevice(devices, drive), nil
 }
 
-func (q *qemuArchBase) appendSCSIController(devices []govmmQemu.Device) []govmmQemu.Device {
+func (q *qemuArchBase) appendSCSIController(devices []govmmQemu.Device, enableIOThreads bool) ([]govmmQemu.Device, *govmmQemu.IOThread) {
 	scsiController := govmmQemu.SCSIController{
 		ID:            scsiControllerID,
 		DisableModern: q.nestedRun,
 	}
 
+	var t *govmmQemu.IOThread
+
+	if enableIOThreads {
+		randBytes, _ := utils.GenerateRandomBytes(8)
+
+		t = &govmmQemu.IOThread{
+			ID: fmt.Sprintf("%s-%s", "iothread", hex.EncodeToString(randBytes)),
+		}
+
+		scsiController.IOThread = t.ID
+	}
+
 	devices = append(devices, scsiController)
 
-	return devices
+	return devices, t
 }
 
 // appendBridges appends to devices the given bridges
@@ -319,6 +338,8 @@ func (q *qemuArchBase) appendBridges(devices []govmmQemu.Device, bridges []Bridg
 			t = govmmQemu.PCIEBridge
 		}
 
+		bridges[idx].Addr = bridgePCIStartAddr + idx
+
 		devices = append(devices,
 			govmmQemu.BridgeDevice{
 				Type: t,
@@ -327,6 +348,7 @@ func (q *qemuArchBase) appendBridges(devices []govmmQemu.Device, bridges []Bridg
 				// Each bridge is required to be assigned a unique chassis id > 0
 				Chassis: (idx + 1),
 				SHPC:    true,
+				Addr:    strconv.FormatInt(int64(bridges[idx].Addr), 10),
 			},
 		)
 	}
@@ -420,7 +442,7 @@ func (q *qemuArchBase) appendNetwork(devices []govmmQemu.Device, endpoint Endpoi
 	return devices
 }
 
-func (q *qemuArchBase) appendBlockDevice(devices []govmmQemu.Device, drive Drive) []govmmQemu.Device {
+func (q *qemuArchBase) appendBlockDevice(devices []govmmQemu.Device, drive drivers.Drive) []govmmQemu.Device {
 	if drive.File == "" || drive.ID == "" || drive.Format == "" {
 		return devices
 	}
@@ -444,28 +466,29 @@ func (q *qemuArchBase) appendBlockDevice(devices []govmmQemu.Device, drive Drive
 	return devices
 }
 
-func (q *qemuArchBase) appendVhostUserDevice(devices []govmmQemu.Device, vhostUserDevice VhostUserDevice) []govmmQemu.Device {
+func (q *qemuArchBase) appendVhostUserDevice(devices []govmmQemu.Device, vhostUserDevice api.VhostUserDevice) []govmmQemu.Device {
 	qemuVhostUserDevice := govmmQemu.VhostUserDevice{}
 
+	// TODO: find a way to remove dependency of drivers package
 	switch vhostUserDevice := vhostUserDevice.(type) {
-	case *VhostUserNetDevice:
-		qemuVhostUserDevice.TypeDevID = makeNameID("net", vhostUserDevice.ID)
+	case *drivers.VhostUserNetDevice:
+		qemuVhostUserDevice.TypeDevID = utils.MakeNameID("net", vhostUserDevice.ID, maxDevIDSize)
 		qemuVhostUserDevice.Address = vhostUserDevice.MacAddress
-	case *VhostUserSCSIDevice:
-		qemuVhostUserDevice.TypeDevID = makeNameID("scsi", vhostUserDevice.ID)
-	case *VhostUserBlkDevice:
+	case *drivers.VhostUserSCSIDevice:
+		qemuVhostUserDevice.TypeDevID = utils.MakeNameID("scsi", vhostUserDevice.ID, maxDevIDSize)
+	case *drivers.VhostUserBlkDevice:
 	}
 
 	qemuVhostUserDevice.VhostUserType = govmmQemu.VhostUserDeviceType(vhostUserDevice.Type())
 	qemuVhostUserDevice.SocketPath = vhostUserDevice.Attrs().SocketPath
-	qemuVhostUserDevice.CharDevID = makeNameID("char", vhostUserDevice.Attrs().ID)
+	qemuVhostUserDevice.CharDevID = utils.MakeNameID("char", vhostUserDevice.Attrs().ID, maxDevIDSize)
 
 	devices = append(devices, qemuVhostUserDevice)
 
 	return devices
 }
 
-func (q *qemuArchBase) appendVFIODevice(devices []govmmQemu.Device, vfioDevice VFIODevice) []govmmQemu.Device {
+func (q *qemuArchBase) appendVFIODevice(devices []govmmQemu.Device, vfioDevice drivers.VFIODevice) []govmmQemu.Device {
 	if vfioDevice.BDF == "" {
 		return devices
 	}
@@ -477,4 +500,12 @@ func (q *qemuArchBase) appendVFIODevice(devices []govmmQemu.Device, vfioDevice V
 	)
 
 	return devices
+}
+
+func (q *qemuArchBase) handleImagePath(config HypervisorConfig) {
+	if config.ImagePath != "" {
+		q.kernelParams = append(q.kernelParams, kernelRootParams...)
+		q.kernelParamsNonDebug = append(q.kernelParamsNonDebug, kernelParamsSystemdNonDebug...)
+		q.kernelParamsDebug = append(q.kernelParamsDebug, kernelParamsSystemdDebug...)
+	}
 }

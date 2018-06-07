@@ -1,16 +1,7 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -37,7 +28,7 @@ const (
 	testConsole                 = "/dev/pts/999"
 	testContainerTypeAnnotation = "io.kubernetes.cri-o.ContainerType"
 	testSandboxIDAnnotation     = "io.kubernetes.cri-o.SandboxID"
-	testContainerTypePod        = "sandbox"
+	testContainerTypeSandbox    = "sandbox"
 	testContainerTypeContainer  = "container"
 )
 
@@ -301,8 +292,8 @@ func TestCreateCLIFunctionCreateFail(t *testing.T) {
 func TestCreateInvalidArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 			{MockID: testContainerID},
@@ -310,18 +301,17 @@ func TestCreateInvalidArgs(t *testing.T) {
 		},
 	}
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
 	}()
 
 	tmpdir, err := ioutil.TempDir("", "")
@@ -364,14 +354,10 @@ func TestCreateInvalidArgs(t *testing.T) {
 func TestCreateInvalidConfigJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -402,20 +388,17 @@ func TestCreateInvalidConfigJSON(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateInvalidContainerType(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -449,20 +432,17 @@ func TestCreateInvalidContainerType(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateContainerInvalid(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -497,31 +477,31 @@ func TestCreateContainerInvalid(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateProcessCgroupsPathSuccessful(t *testing.T) {
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 		},
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
-		testingImpl.CreatePodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
 	}()
 
 	tmpdir, err := ioutil.TempDir("", "")
@@ -544,9 +524,9 @@ func TestCreateProcessCgroupsPathSuccessful(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// Force pod-type container
+	// Force sandbox-type container
 	spec.Annotations = make(map[string]string)
-	spec.Annotations[testContainerTypeAnnotation] = testContainerTypePod
+	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeSandbox
 
 	// Set a limit to ensure processCgroupsPath() considers the
 	// cgroup part of the spec
@@ -587,6 +567,7 @@ func TestCreateProcessCgroupsPathSuccessful(t *testing.T) {
 	for _, detach := range []bool{true, false} {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, detach, runtimeConfig)
 		assert.NoError(err, "detached: %+v", detach)
+		os.RemoveAll(path)
 	}
 }
 
@@ -598,25 +579,24 @@ func TestCreateCreateCgroupsFilesFail(t *testing.T) {
 
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 		},
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
-		testingImpl.CreatePodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
 	}()
 
 	tmpdir, err := ioutil.TempDir("", "")
@@ -639,9 +619,9 @@ func TestCreateCreateCgroupsFilesFail(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// Force pod-type container
+	// Force sandbox-type container
 	spec.Annotations = make(map[string]string)
-	spec.Annotations[testContainerTypeAnnotation] = testContainerTypePod
+	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeSandbox
 
 	// Set a limit to ensure processCgroupsPath() considers the
 	// cgroup part of the spec
@@ -672,6 +652,7 @@ func TestCreateCreateCgroupsFilesFail(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
@@ -683,25 +664,24 @@ func TestCreateCreateCreatePidFileFail(t *testing.T) {
 
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 		},
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
-		testingImpl.CreatePodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
 	}()
 
 	tmpdir, err := ioutil.TempDir("", "")
@@ -725,9 +705,9 @@ func TestCreateCreateCreatePidFileFail(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// Force pod-type container
+	// Force sandbox-type container
 	spec.Annotations = make(map[string]string)
-	spec.Annotations[testContainerTypeAnnotation] = testContainerTypePod
+	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeSandbox
 
 	// Set a limit to ensure processCgroupsPath() considers the
 	// cgroup part of the spec
@@ -748,31 +728,31 @@ func TestCreateCreateCreatePidFileFail(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreate(t *testing.T) {
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 		},
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
-		testingImpl.CreatePodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
 	}()
 
 	tmpdir, err := ioutil.TempDir("", "")
@@ -795,9 +775,9 @@ func TestCreate(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// Force pod-type container
+	// Force sandbox-type container
 	spec.Annotations = make(map[string]string)
-	spec.Annotations[testContainerTypeAnnotation] = testContainerTypePod
+	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeSandbox
 
 	// Set a limit to ensure processCgroupsPath() considers the
 	// cgroup part of the spec
@@ -813,20 +793,17 @@ func TestCreate(t *testing.T) {
 	for detach := range []bool{true, false} {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.NoError(err, "%+v", detach)
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateInvalidKernelParams(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -848,9 +825,9 @@ func TestCreateInvalidKernelParams(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// Force createPod() to be called.
+	// Force createSandbox() to be called.
 	spec.Annotations = make(map[string]string)
-	spec.Annotations[testContainerTypeAnnotation] = testContainerTypePod
+	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeSandbox
 
 	// rewrite the file
 	err = writeOCIConfigFile(spec, ociConfigFile)
@@ -874,20 +851,17 @@ func TestCreateInvalidKernelParams(t *testing.T) {
 		err := create(testContainerID, bundlePath, testConsole, pidFilePath, true, runtimeConfig)
 		assert.Errorf(err, "%+v", detach)
 		assert.False(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
-func TestCreateCreatePodPodConfigFail(t *testing.T) {
+func TestCreateSandboxConfigFail(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -919,22 +893,18 @@ func TestCreateCreatePodPodConfigFail(t *testing.T) {
 		Quota: &quota,
 	}
 
-	_, err = createPod(spec, runtimeConfig, testContainerID, bundlePath, testConsole, true)
+	_, err = createSandbox(spec, runtimeConfig, testContainerID, bundlePath, testConsole, true)
 	assert.Error(err)
 	assert.False(vcmock.IsMockError(err))
 }
 
-func TestCreateCreatePodFail(t *testing.T) {
+func TestCreateCreateSandboxFail(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -954,7 +924,7 @@ func TestCreateCreatePodFail(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	_, err = createPod(spec, runtimeConfig, testContainerID, bundlePath, testConsole, true)
+	_, err = createSandbox(spec, runtimeConfig, testContainerID, bundlePath, testConsole, true)
 	assert.Error(err)
 	assert.True(vcmock.IsMockError(err))
 }
@@ -962,14 +932,10 @@ func TestCreateCreatePodFail(t *testing.T) {
 func TestCreateCreateContainerContainerConfigFail(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -1000,20 +966,17 @@ func TestCreateCreateContainerContainerConfigFail(t *testing.T) {
 		assert.Error(err)
 		assert.False(vcmock.IsMockError(err))
 		assert.True(strings.Contains(err.Error(), containerType))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateCreateContainerFail(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
-
-	defer func() {
-		testingImpl.ListPodFunc = nil
-	}()
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	tmpdir, err := ioutil.TempDir("", "")
 	assert.NoError(err)
@@ -1030,10 +993,10 @@ func TestCreateCreateContainerFail(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// set expected container type and podID
+	// set expected container type and sandboxID
 	spec.Annotations = make(map[string]string)
 	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeContainer
-	spec.Annotations[testSandboxIDAnnotation] = testPodID
+	spec.Annotations[testSandboxIDAnnotation] = testSandboxID
 
 	// rewrite file
 	err = writeOCIConfigFile(spec, ociConfigFile)
@@ -1043,23 +1006,23 @@ func TestCreateCreateContainerFail(t *testing.T) {
 		_, err = createContainer(spec, testContainerID, bundlePath, testConsole, disableOutput)
 		assert.Error(err)
 		assert.True(vcmock.IsMockError(err))
+		os.RemoveAll(path)
 	}
 }
 
 func TestCreateCreateContainer(t *testing.T) {
 	assert := assert.New(t)
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		// No pre-existing pods
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
-	testingImpl.CreateContainerFunc = func(podID string, containerConfig vc.ContainerConfig) (vc.VCPod, vc.VCContainer, error) {
-		return &vcmock.Pod{}, &vcmock.Container{}, nil
+	testingImpl.CreateContainerFunc = func(sandboxID string, containerConfig vc.ContainerConfig) (vc.VCSandbox, vc.VCContainer, error) {
+		return &vcmock.Sandbox{}, &vcmock.Container{}, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
 		testingImpl.CreateContainerFunc = nil
 	}()
 
@@ -1078,10 +1041,10 @@ func TestCreateCreateContainer(t *testing.T) {
 	spec, err := readOCIConfigFile(ociConfigFile)
 	assert.NoError(err)
 
-	// set expected container type and podID
+	// set expected container type and sandboxID
 	spec.Annotations = make(map[string]string)
 	spec.Annotations[testContainerTypeAnnotation] = testContainerTypeContainer
-	spec.Annotations[testSandboxIDAnnotation] = testPodID
+	spec.Annotations[testSandboxIDAnnotation] = testSandboxID
 
 	// rewrite file
 	err = writeOCIConfigFile(spec, ociConfigFile)
@@ -1090,6 +1053,7 @@ func TestCreateCreateContainer(t *testing.T) {
 	for _, disableOutput := range []bool{true, false} {
 		_, err = createContainer(spec, testContainerID, bundlePath, testConsole, disableOutput)
 		assert.NoError(err)
+		os.RemoveAll(path)
 	}
 }
 

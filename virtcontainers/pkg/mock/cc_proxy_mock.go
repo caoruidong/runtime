@@ -1,16 +1,7 @@
 // Copyright (c) 2018 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package mock
 
@@ -31,6 +22,8 @@ const testToken = "pF56IaDpuax6hihJ5PneB8JypqmOvjkqY-wKGVYqgIM="
 
 // CCProxyMock is an object mocking clearcontainers Proxy
 type CCProxyMock struct {
+	sync.Mutex
+
 	t              *testing.T
 	wg             sync.WaitGroup
 	connectionPath string
@@ -50,6 +43,8 @@ type CCProxyMock struct {
 	Signal           chan ShimSignal
 	ShimDisconnected chan bool
 	StdinReceived    chan bool
+
+	stopped bool
 }
 
 // NewCCProxyMock creates a hyperstart instance
@@ -296,10 +291,19 @@ func (proxy *CCProxyMock) serve() {
 
 // Start invokes mock proxy instance to start listening.
 func (proxy *CCProxyMock) Start() {
+	proxy.stopped = false
 	proxy.startListening()
 	go func() {
 		for {
 			proxy.serve()
+
+			proxy.Lock()
+			stopped := proxy.stopped
+			proxy.Unlock()
+
+			if stopped {
+				break
+			}
 		}
 	}()
 }
@@ -307,6 +311,10 @@ func (proxy *CCProxyMock) Start() {
 // Stop causes  mock proxy instance to stop listening,
 // close connection to client and close all channels
 func (proxy *CCProxyMock) Stop() {
+	proxy.Lock()
+	proxy.stopped = true
+	proxy.Unlock()
+
 	proxy.listener.Close()
 
 	if proxy.cl != nil {

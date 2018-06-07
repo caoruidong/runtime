@@ -1,26 +1,16 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
 
 type mockHypervisor struct {
+	vCPUs uint32
 }
 
-func (m *mockHypervisor) init(pod *Pod) error {
-	valid, err := pod.config.HypervisorConfig.valid()
+func (m *mockHypervisor) init(sandbox *Sandbox) error {
+	valid, err := sandbox.config.HypervisorConfig.valid()
 	if valid == false || err != nil {
 		return err
 	}
@@ -32,27 +22,27 @@ func (m *mockHypervisor) capabilities() capabilities {
 	return capabilities{}
 }
 
-func (m *mockHypervisor) createPod(podConfig PodConfig) error {
+func (m *mockHypervisor) createSandbox(sandboxConfig SandboxConfig) error {
 	return nil
 }
 
-func (m *mockHypervisor) startPod() error {
+func (m *mockHypervisor) startSandbox() error {
 	return nil
 }
 
-func (m *mockHypervisor) waitPod(timeout int) error {
+func (m *mockHypervisor) waitSandbox(timeout int) error {
 	return nil
 }
 
-func (m *mockHypervisor) stopPod() error {
+func (m *mockHypervisor) stopSandbox() error {
 	return nil
 }
 
-func (m *mockHypervisor) pausePod() error {
+func (m *mockHypervisor) pauseSandbox() error {
 	return nil
 }
 
-func (m *mockHypervisor) resumePod() error {
+func (m *mockHypervisor) resumeSandbox() error {
 	return nil
 }
 
@@ -60,14 +50,22 @@ func (m *mockHypervisor) addDevice(devInfo interface{}, devType deviceType) erro
 	return nil
 }
 
-func (m *mockHypervisor) hotplugAddDevice(devInfo interface{}, devType deviceType) error {
-	return nil
+func (m *mockHypervisor) hotplugAddDevice(devInfo interface{}, devType deviceType) (interface{}, error) {
+	switch devType {
+	case cpuDev:
+		return m.vCPUs, nil
+	}
+	return nil, nil
 }
 
-func (m *mockHypervisor) hotplugRemoveDevice(devInfo interface{}, devType deviceType) error {
-	return nil
+func (m *mockHypervisor) hotplugRemoveDevice(devInfo interface{}, devType deviceType) (interface{}, error) {
+	switch devType {
+	case cpuDev:
+		return m.vCPUs, nil
+	}
+	return nil, nil
 }
 
-func (m *mockHypervisor) getPodConsole(podID string) string {
-	return ""
+func (m *mockHypervisor) getSandboxConsole(sandboxID string) (string, error) {
+	return "", nil
 }

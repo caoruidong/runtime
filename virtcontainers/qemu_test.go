@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -39,6 +28,7 @@ func newQemuConfig() HypervisorConfig {
 		DefaultBridges:    defaultBridges,
 		BlockDeviceDriver: defaultBlockDriver,
 		DefaultMaxVCPUs:   defaultMaxQemuVCPUs,
+		Msize9p:           defaultMsize9p,
 	}
 }
 
@@ -62,7 +52,7 @@ func testQemuKernelParameters(t *testing.T, kernelParams []Param, expected strin
 }
 
 func TestQemuKernelParameters(t *testing.T) {
-	expectedOut := "panic=1 initcall_debug foo=foo bar=bar"
+	expectedOut := fmt.Sprintf("panic=1 initcall_debug nr_cpus=%d foo=foo bar=bar", MaxQemuVCPUs())
 	params := []Param{
 		{
 			Key:   "foo",
@@ -82,21 +72,21 @@ func TestQemuInit(t *testing.T) {
 	qemuConfig := newQemuConfig()
 	q := &qemu{}
 
-	pod := &Pod{
-		id:      "testPod",
+	sandbox := &Sandbox{
+		id:      "testSandbox",
 		storage: &filesystem{},
-		config: &PodConfig{
+		config: &SandboxConfig{
 			HypervisorConfig: qemuConfig,
 		},
 	}
 
 	// Create parent dir path for hypervisor.json
-	parentDir := filepath.Join(runStoragePath, pod.id)
+	parentDir := filepath.Join(runStoragePath, sandbox.id)
 	if err := os.MkdirAll(parentDir, dirMode); err != nil {
 		t.Fatalf("Could not create parent directory %s: %v", parentDir, err)
 	}
 
-	if err := q.init(pod); err != nil {
+	if err := q.init(sandbox); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,21 +103,21 @@ func TestQemuInitMissingParentDirFail(t *testing.T) {
 	qemuConfig := newQemuConfig()
 	q := &qemu{}
 
-	pod := &Pod{
-		id:      "testPod",
+	sandbox := &Sandbox{
+		id:      "testSandbox",
 		storage: &filesystem{},
-		config: &PodConfig{
+		config: &SandboxConfig{
 			HypervisorConfig: qemuConfig,
 		},
 	}
 
 	// Ensure parent dir path for hypervisor.json does not exist.
-	parentDir := filepath.Join(runStoragePath, pod.id)
+	parentDir := filepath.Join(runStoragePath, sandbox.id)
 	if err := os.RemoveAll(parentDir); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := q.init(pod); err == nil {
+	if err := q.init(sandbox); err == nil {
 		t.Fatal("Qemu init() expected to fail because of missing parent directory for storage")
 	}
 }
@@ -138,7 +128,8 @@ func TestQemuCPUTopology(t *testing.T) {
 	q := &qemu{
 		arch: &qemuArchBase{},
 		config: HypervisorConfig{
-			DefaultVCPUs: uint32(vcpus),
+			DefaultVCPUs:    uint32(vcpus),
+			DefaultMaxVCPUs: uint32(vcpus),
 		},
 	}
 
@@ -147,7 +138,7 @@ func TestQemuCPUTopology(t *testing.T) {
 		Sockets: uint32(vcpus),
 		Cores:   defaultCores,
 		Threads: defaultThreads,
-		MaxCPUs: defaultMaxQemuVCPUs,
+		MaxCPUs: uint32(vcpus),
 	}
 
 	smp := q.cpuTopology()
@@ -180,11 +171,11 @@ func TestQemuMemoryTopology(t *testing.T) {
 		Memory: uint(mem),
 	}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		VMConfig: vmConfig,
 	}
 
-	memory, err := q.memoryTopology(podConfig)
+	memory, err := q.memoryTopology(sandboxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,12 +250,17 @@ func TestQemuAddDeviceSerialPortDev(t *testing.T) {
 	testQemuAddDevice(t, socket, serialPortDev, expectedOut)
 }
 
-func TestQemuGetPodConsole(t *testing.T) {
+func TestQemuGetSandboxConsole(t *testing.T) {
 	q := &qemu{}
-	podID := "testPodID"
-	expected := filepath.Join(runStoragePath, podID, defaultConsole)
+	sandboxID := "testSandboxID"
+	expected := filepath.Join(runStoragePath, sandboxID, defaultConsole)
 
-	if result := q.getPodConsole(podID); result != expected {
+	result, err := q.getSandboxConsole(sandboxID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result != expected {
 		t.Fatalf("Got %s\nExpecting %s", result, expected)
 	}
 }

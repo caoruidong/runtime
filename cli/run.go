@@ -1,17 +1,8 @@
 // Copyright (c) 2014,2015,2016 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -90,7 +81,7 @@ func run(containerID, bundle, console, consoleSocket, pidFile string, detach boo
 		return err
 	}
 
-	pod, err := start(containerID)
+	sandbox, err := start(containerID)
 	if err != nil {
 		return err
 	}
@@ -99,9 +90,9 @@ func run(containerID, bundle, console, consoleSocket, pidFile string, detach boo
 		return nil
 	}
 
-	containers := pod.GetAllContainers()
+	containers := sandbox.GetAllContainers()
 	if len(containers) == 0 {
-		return fmt.Errorf("There are no containers running in the pod: %s", pod.ID())
+		return fmt.Errorf("There are no containers running in the sandbox: %s", sandbox.ID())
 	}
 
 	p, err := os.FindProcess(containers[0].GetPid())
@@ -115,7 +106,7 @@ func run(containerID, bundle, console, consoleSocket, pidFile string, detach boo
 	}
 
 	// delete container's resources
-	if err := delete(pod.ID(), true); err != nil {
+	if err := delete(sandbox.ID(), true); err != nil {
 		return err
 	}
 

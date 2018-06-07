@@ -1,17 +1,8 @@
 // Copyright (c) 2014,2015,2016,2017 Docker, Inc.
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -309,22 +300,22 @@ func getContainers(context *cli.Context) ([]fullContainerState, error) {
 
 	latestHypervisorDetails := getHypervisorDetails(&runtimeConfig.HypervisorConfig)
 
-	podList, err := vci.ListPod()
+	sandboxList, err := vci.ListSandbox()
 	if err != nil {
 		return nil, err
 	}
 
 	var s []fullContainerState
 
-	for _, pod := range podList {
-		if len(pod.ContainersStatus) == 0 {
-			// ignore empty pods
+	for _, sandbox := range sandboxList {
+		if len(sandbox.ContainersStatus) == 0 {
+			// ignore empty sandboxes
 			continue
 		}
 
-		currentHypervisorDetails := getHypervisorDetails(&pod.HypervisorConfig)
+		currentHypervisorDetails := getHypervisorDetails(&sandbox.HypervisorConfig)
 
-		for _, container := range pod.ContainersStatus {
+		for _, container := range sandbox.ContainersStatus {
 			ociState := oci.StatusToOCIState(container)
 			staleAssets := getStaleAssets(currentHypervisorDetails, latestHypervisorDetails)
 

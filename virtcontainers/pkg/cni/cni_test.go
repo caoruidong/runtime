@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package cni
@@ -267,12 +256,12 @@ func TestNewNetworkPluginFailureWrongNetwork(t *testing.T) {
 
 func TestBuildRuntimeConf(t *testing.T) {
 	expected := libcni.RuntimeConf{
-		ContainerID: "testPodID",
-		NetNS:       "testPodNetNSPath",
+		ContainerID: "testSandboxID",
+		NetNS:       "testSandboxNetNSPath",
 		IfName:      "testIfName",
 	}
 
-	runtimeConf := buildRuntimeConf("testPodID", "testPodNetNSPath", "testIfName")
+	runtimeConf := buildRuntimeConf("testSandboxID", "testSandboxNetNSPath", "testIfName")
 
 	if reflect.DeepEqual(*runtimeConf, expected) == false {
 		t.Fatal("Runtime configuration different from expected one")
@@ -298,7 +287,7 @@ func TestAddNetworkSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = netPlugin.AddNetwork("testPodID", testNetNsPath, "testIfName")
+	_, err = netPlugin.AddNetwork("testSandboxID", testNetNsPath, "testIfName")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +312,7 @@ func TestAddNetworkFailureUnknownNetNs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = netPlugin.AddNetwork("testPodID", invalidNetNsPath, "testIfName")
+	_, err = netPlugin.AddNetwork("testSandboxID", invalidNetNsPath, "testIfName")
 	if err == nil {
 		t.Fatalf("Should fail because netns %s does not exist", invalidNetNsPath)
 	}
@@ -348,12 +337,12 @@ func TestRemoveNetworkSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = netPlugin.AddNetwork("testPodID", testNetNsPath, "testIfName")
+	_, err = netPlugin.AddNetwork("testSandboxID", testNetNsPath, "testIfName")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = netPlugin.RemoveNetwork("testPodID", testNetNsPath, "testIfName")
+	err = netPlugin.RemoveNetwork("testSandboxID", testNetNsPath, "testIfName")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +367,7 @@ func TestRemoveNetworkSuccessfulNetworkDoesNotExist(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = netPlugin.RemoveNetwork("testPodID", testNetNsPath, "testIfName")
+	err = netPlugin.RemoveNetwork("testSandboxID", testNetNsPath, "testIfName")
 	if err != nil {
 		// CNI specification says that no error should be returned
 		// in case we try to tear down a non-existing network.

@@ -1,16 +1,7 @@
 // Copyright (c) 2017-2018 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -24,13 +15,14 @@ import (
 	"github.com/kata-containers/runtime/virtcontainers/pkg/oci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli"
+	runtim "runtime"
 )
 
 // Semantic version for the output of the command.
 //
 // XXX: Increment for every change to the output format
 // (meaning any change to the EnvInfo type).
-const formatVersion = "1.0.10"
+const formatVersion = "1.0.12"
 
 // MetaInfo stores information on the format of the output itself
 type MetaInfo struct {
@@ -84,8 +76,9 @@ type HypervisorInfo struct {
 	MachineType       string
 	Version           string
 	Path              string
-	Debug             bool
 	BlockDeviceDriver string
+	Msize9p           uint32
+	Debug             bool
 }
 
 // ProxyInfo stores proxy details
@@ -106,8 +99,7 @@ type ShimInfo struct {
 
 // AgentInfo stores agent details
 type AgentInfo struct {
-	Type    string
-	Version string
+	Type string
 }
 
 // DistroInfo stores host operating system distribution details.
@@ -182,6 +174,9 @@ func getHostInfo() (HostInfo, error) {
 	}
 
 	hostVMContainerCapable := true
+	if runtim.GOARCH == "ppc64le" {
+		hostVMContainerCapable = false
+	}
 
 	details := vmContainerCapableDetails{
 		cpuInfoFile:           procCPUInfo,
@@ -260,8 +255,7 @@ func getShimInfo(config oci.RuntimeConfig) (ShimInfo, error) {
 
 func getAgentInfo(config oci.RuntimeConfig) AgentInfo {
 	agent := AgentInfo{
-		Type:    string(config.AgentType),
-		Version: unknown,
+		Type: string(config.AgentType),
 	}
 
 	return agent
@@ -280,6 +274,7 @@ func getHypervisorInfo(config oci.RuntimeConfig) HypervisorInfo {
 		Version:           version,
 		Path:              hypervisorPath,
 		BlockDeviceDriver: config.HypervisorConfig.BlockDeviceDriver,
+		Msize9p:           config.HypervisorConfig.Msize9p,
 	}
 }
 

@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -109,7 +98,7 @@ func TestNewAgentFromUnknownAgentType(t *testing.T) {
 	testNewAgentFromAgentType(t, agentType, &noopAgent{})
 }
 
-func testNewAgentConfig(t *testing.T, config PodConfig, expected interface{}) {
+func testNewAgentConfig(t *testing.T, config SandboxConfig, expected interface{}) {
 	agentConfig := newAgentConfig(config)
 	if reflect.DeepEqual(agentConfig, expected) == false {
 		t.Fatal()
@@ -119,38 +108,38 @@ func testNewAgentConfig(t *testing.T, config PodConfig, expected interface{}) {
 func TestNewAgentConfigFromNoopAgentType(t *testing.T) {
 	var agentConfig interface{}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		AgentType:   NoopAgentType,
 		AgentConfig: agentConfig,
 	}
 
-	testNewAgentConfig(t, podConfig, agentConfig)
+	testNewAgentConfig(t, sandboxConfig, agentConfig)
 }
 
 func TestNewAgentConfigFromHyperstartAgentType(t *testing.T) {
 	agentConfig := HyperConfig{}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		AgentType:   HyperstartAgent,
 		AgentConfig: agentConfig,
 	}
 
-	testNewAgentConfig(t, podConfig, agentConfig)
+	testNewAgentConfig(t, sandboxConfig, agentConfig)
 }
 
 func TestNewAgentConfigFromKataAgentType(t *testing.T) {
 	agentConfig := KataAgentConfig{}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		AgentType:   KataContainersAgent,
 		AgentConfig: agentConfig,
 	}
 
-	testNewAgentConfig(t, podConfig, agentConfig)
+	testNewAgentConfig(t, sandboxConfig, agentConfig)
 }
 
 func TestNewAgentConfigFromUnknownAgentType(t *testing.T) {
 	var agentConfig interface{}
 
-	testNewAgentConfig(t, PodConfig{}, agentConfig)
+	testNewAgentConfig(t, SandboxConfig{}, agentConfig)
 }

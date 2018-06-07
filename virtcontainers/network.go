@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -30,12 +19,15 @@ import (
 	"time"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/kata-containers/runtime/virtcontainers/pkg/uuid"
 	"github.com/safchain/ethtool"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
+	"github.com/kata-containers/runtime/virtcontainers/pkg/uuid"
+	"github.com/kata-containers/runtime/virtcontainers/utils"
 )
 
 // NetInterworkingModel defines the network model connecting
@@ -272,14 +264,14 @@ func (endpoint *VhostUserEndpoint) SetProperties(properties NetworkInfo) {
 func (endpoint *VhostUserEndpoint) Attach(h hypervisor) error {
 	networkLogger().Info("Attaching vhostuser based endpoint")
 
-	// generate a unique ID to be used for hypervisor commandline fields
-	randBytes, err := generateRandomBytes(8)
+	// Generate a unique ID to be used for hypervisor commandline fields
+	randBytes, err := utils.GenerateRandomBytes(8)
 	if err != nil {
 		return err
 	}
 	id := hex.EncodeToString(randBytes)
 
-	d := VhostUserNetDevice{
+	d := drivers.VhostUserNetDevice{
 		MacAddress: endpoint.HardAddr,
 	}
 	d.SocketPath = endpoint.SocketPath
@@ -342,7 +334,7 @@ func (endpoint *PhysicalEndpoint) Attach(h hypervisor) error {
 		return err
 	}
 
-	d := VFIODevice{
+	d := drivers.VFIODevice{
 		BDF: endpoint.BDF,
 	}
 
@@ -600,10 +592,10 @@ func runNetworkCommon(networkNSPath string, cb func() error) error {
 	})
 }
 
-func addNetworkCommon(pod Pod, networkNS *NetworkNamespace) error {
+func addNetworkCommon(sandbox *Sandbox, networkNS *NetworkNamespace) error {
 	err := doNetNS(networkNS.NetNsPath, func(_ ns.NetNS) error {
 		for _, endpoint := range networkNS.Endpoints {
-			if err := endpoint.Attach(pod.hypervisor); err != nil {
+			if err := endpoint.Attach(sandbox.hypervisor); err != nil {
 				return err
 			}
 		}
@@ -747,7 +739,7 @@ func createFds(device string, numFds int) ([]*os.File, error) {
 	for i := 0; i < numFds; i++ {
 		f, err := os.OpenFile(device, os.O_RDWR, defaultFilePerms)
 		if err != nil {
-			cleanupFds(fds, i)
+			utils.CleanupFds(fds, i)
 			return nil, err
 		}
 		fds[i] = f
@@ -1358,11 +1350,49 @@ func createPhysicalEndpoint(netInfo NetworkInfo) (*PhysicalEndpoint, error) {
 }
 
 func bindNICToVFIO(endpoint *PhysicalEndpoint) error {
-	return bindDevicetoVFIO(endpoint.BDF, endpoint.Driver, endpoint.VendorDeviceID)
+	return drivers.BindDevicetoVFIO(endpoint.BDF, endpoint.Driver, endpoint.VendorDeviceID)
 }
 
 func bindNICToHost(endpoint *PhysicalEndpoint) error {
-	return bindDevicetoHost(endpoint.BDF, endpoint.Driver, endpoint.VendorDeviceID)
+	return drivers.BindDevicetoHost(endpoint.BDF, endpoint.Driver, endpoint.VendorDeviceID)
+}
+
+// Long term, this should be made more configurable.  For now matching path
+// provided by CNM VPP and OVS-DPDK plugins, available at github.com/clearcontainers/vpp and
+// github.com/clearcontainers/ovsdpdk.  The plugins create the socket on the host system
+// using this path.
+const hostSocketSearchPath = "/tmp/vhostuser_%s/vhu.sock"
+
+// findVhostUserNetSocketPath checks if an interface is a dummy placeholder
+// for a vhost-user socket, and if it is it returns the path to the socket
+func findVhostUserNetSocketPath(netInfo NetworkInfo) (string, error) {
+	if netInfo.Iface.Name == "lo" {
+		return "", nil
+	}
+
+	// check for socket file existence at known location.
+	for _, addr := range netInfo.Addrs {
+		socketPath := fmt.Sprintf(hostSocketSearchPath, addr.IPNet.IP)
+		if _, err := os.Stat(socketPath); err == nil {
+			return socketPath, nil
+		}
+	}
+
+	return "", nil
+}
+
+// vhostUserSocketPath returns the path of the socket discovered.  This discovery
+// will vary depending on the type of vhost-user socket.
+//  Today only VhostUserNetDevice is supported.
+func vhostUserSocketPath(info interface{}) (string, error) {
+
+	switch v := info.(type) {
+	case NetworkInfo:
+		return findVhostUserNetSocketPath(v)
+	default:
+		return "", nil
+	}
+
 }
 
 // network is the virtcontainers network interface.
@@ -1376,9 +1406,9 @@ type network interface {
 	run(networkNSPath string, cb func() error) error
 
 	// add adds all needed interfaces inside the network namespace.
-	add(pod Pod, config NetworkConfig, netNsPath string, netNsCreated bool) (NetworkNamespace, error)
+	add(sandbox *Sandbox, config NetworkConfig, netNsPath string, netNsCreated bool) (NetworkNamespace, error)
 
 	// remove unbridges and deletes TAP interfaces. It also removes virtual network
 	// interfaces and deletes the network namespace.
-	remove(pod Pod, networkNS NetworkNamespace) error
+	remove(sandbox *Sandbox, networkNS NetworkNamespace) error
 }

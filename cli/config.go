@@ -1,16 +1,7 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -83,15 +74,18 @@ type hypervisor struct {
 	KernelParams          string `toml:"kernel_params"`
 	MachineType           string `toml:"machine_type"`
 	DefaultVCPUs          int32  `toml:"default_vcpus"`
+	DefaultMaxVCPUs       uint32 `toml:"default_maxvcpus"`
 	DefaultMemSz          uint32 `toml:"default_memory"`
 	DefaultBridges        uint32 `toml:"default_bridges"`
-	DisableBlockDeviceUse bool   `toml:"disable_block_device_use"`
+	Msize9p               uint32 `toml:"msize_9p"`
 	BlockDeviceDriver     string `toml:"block_device_driver"`
+	DisableBlockDeviceUse bool   `toml:"disable_block_device_use"`
 	MemPrealloc           bool   `toml:"enable_mem_prealloc"`
 	HugePages             bool   `toml:"enable_hugepages"`
 	Swap                  bool   `toml:"enable_swap"`
 	Debug                 bool   `toml:"enable_debug"`
 	DisableNestingChecks  bool   `toml:"disable_nesting_checks"`
+	EnableIOThreads       bool   `toml:"enable_iothreads"`
 }
 
 type proxy struct {
@@ -209,6 +203,25 @@ func (h hypervisor) defaultVCPUs() uint32 {
 	return uint32(h.DefaultVCPUs)
 }
 
+func (h hypervisor) defaultMaxVCPUs() uint32 {
+	numcpus := uint32(goruntime.NumCPU())
+	maxvcpus := vc.MaxQemuVCPUs()
+	reqVCPUs := h.DefaultMaxVCPUs
+
+	//don't exceed the number of physical CPUs. If a default is not provided, use the
+	// numbers of physical CPUs
+	if reqVCPUs >= numcpus || reqVCPUs == 0 {
+		reqVCPUs = numcpus
+	}
+
+	// Don't exceed the maximum number of vCPUs supported by hypervisor
+	if reqVCPUs > maxvcpus {
+		return maxvcpus
+	}
+
+	return reqVCPUs
+}
+
 func (h hypervisor) defaultMemSz() uint32 {
 	if h.DefaultMemSz < 8 {
 		return defaultMemSize // MiB
@@ -239,6 +252,14 @@ func (h hypervisor) blockDeviceDriver() (string, error) {
 	}
 
 	return h.BlockDeviceDriver, nil
+}
+
+func (h hypervisor) msize9p() uint32 {
+	if h.Msize9p == 0 {
+		return defaultMsize9p
+	}
+
+	return h.Msize9p
 }
 
 func (p proxy) path() string {
@@ -288,6 +309,11 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 		return vc.HypervisorConfig{}, err
 	}
 
+	if image != "" && initrd != "" {
+		return vc.HypervisorConfig{},
+			errors.New("cannot specify an image and an initrd in configuration file")
+	}
+
 	firmware, err := h.firmware()
 	if err != nil {
 		return vc.HypervisorConfig{}, err
@@ -312,6 +338,7 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 		KernelParams:          vc.DeserializeParams(strings.Fields(kernelParams)),
 		HypervisorMachineType: machineType,
 		DefaultVCPUs:          h.defaultVCPUs(),
+		DefaultMaxVCPUs:       h.defaultMaxVCPUs(),
 		DefaultMemSz:          h.defaultMemSz(),
 		DefaultBridges:        h.defaultBridges(),
 		DisableBlockDeviceUse: h.DisableBlockDeviceUse,
@@ -321,6 +348,8 @@ func newQemuHypervisorConfig(h hypervisor) (vc.HypervisorConfig, error) {
 		Debug:                 h.Debug,
 		DisableNestingChecks:  h.DisableNestingChecks,
 		BlockDeviceDriver:     blockDriver,
+		EnableIOThreads:       h.EnableIOThreads,
+		Msize9p:               h.msize9p(),
 	}, nil
 }
 
@@ -415,6 +444,7 @@ func loadConfiguration(configPath string, ignoreLogging bool) (resolvedConfigPat
 		MachineAccelerators:   defaultMachineAccelerators,
 		HypervisorMachineType: defaultMachineType,
 		DefaultVCPUs:          defaultVCPUCount,
+		DefaultMaxVCPUs:       defaultMaxVCPUCount,
 		DefaultMemSz:          defaultMemSize,
 		DefaultBridges:        defaultBridgesCount,
 		MemPrealloc:           defaultEnableMemPrealloc,
@@ -423,6 +453,8 @@ func loadConfiguration(configPath string, ignoreLogging bool) (resolvedConfigPat
 		Debug:                 defaultEnableDebug,
 		DisableNestingChecks:  defaultDisableNestingChecks,
 		BlockDeviceDriver:     defaultBlockDeviceDriver,
+		EnableIOThreads:       defaultEnableIOThreads,
+		Msize9p:               defaultMsize9p,
 	}
 
 	err = config.InterNetworkModel.SetModel(defaultInterNetworkingModel)
@@ -465,6 +497,7 @@ func loadConfiguration(configPath string, ignoreLogging bool) (resolvedConfigPat
 	}
 
 	if tomlConf.Runtime.Debug {
+		debug = true
 		crashOnError = true
 	} else {
 		// If debug is not required, switch back to the original
@@ -488,7 +521,8 @@ func loadConfiguration(configPath string, ignoreLogging bool) (resolvedConfigPat
 		kataLog.WithFields(
 			logrus.Fields{
 				"format": "TOML",
-			}).Debugf("loaded configuration")
+				"file":   resolved,
+			}).Info("loaded configuration")
 	}
 
 	if err := updateRuntimeConfig(resolved, tomlConf, &config); err != nil {

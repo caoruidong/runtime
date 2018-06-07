@@ -1,16 +1,7 @@
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// SPDX-License-Identifier: Apache-2.0
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package main
 
@@ -67,30 +58,30 @@ func TestRunCliAction(t *testing.T) {
 func TestRunInvalidArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 		MockContainers: []*vcmock.Container{
 			{MockID: testContainerID},
 		},
 	}
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		return []vc.PodStatus{}, nil
-	}
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
 	}()
 
 	// temporal dir to place container files
@@ -161,7 +152,7 @@ type runContainerData struct {
 	consolePath   string
 	bundlePath    string
 	configJSON    string
-	pod           *vcmock.Pod
+	sandbox       *vcmock.Sandbox
 	runtimeConfig oci.RuntimeConfig
 	process       *os.Process
 	tmpDir        string
@@ -195,16 +186,16 @@ func testRunContainerSetup(t *testing.T) runContainerData {
 	// config json path
 	configPath := filepath.Join(bundlePath, specConfig)
 
-	// pod id and container id must be the same otherwise delete will not works
-	pod := &vcmock.Pod{
+	// sandbox id and container id must be the same otherwise delete will not works
+	sandbox := &vcmock.Sandbox{
 		MockID: testContainerID,
 	}
 
-	pod.MockContainers = []*vcmock.Container{
+	sandbox.MockContainers = []*vcmock.Container{
 		{
-			MockID:  testContainerID,
-			MockPid: cmd.Process.Pid,
-			MockPod: pod,
+			MockID:      testContainerID,
+			MockPid:     cmd.Process.Pid,
+			MockSandbox: sandbox,
 		},
 	}
 
@@ -220,7 +211,7 @@ func testRunContainerSetup(t *testing.T) runContainerData {
 		consolePath:   consolePath,
 		bundlePath:    bundlePath,
 		configJSON:    configJSON,
-		pod:           pod,
+		sandbox:       sandbox,
 		runtimeConfig: runtimeConfig,
 		process:       cmd.Process,
 		tmpDir:        tmpdir,
@@ -233,68 +224,66 @@ func TestRunContainerSuccessful(t *testing.T) {
 	d := testRunContainerSetup(t)
 	defer os.RemoveAll(d.tmpDir)
 
-	// this flags is used to detect if createPodFunc was called
+	// this flags is used to detect if createSandboxFunc was called
 	flagCreate := false
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
 		flagCreate = true
-		return d.pod, nil
+		return d.sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
+
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
 		// return an empty list on create
 		if !flagCreate {
-			return []vc.PodStatus{}, nil
+			return vc.ContainerStatus{}, nil
 		}
 
-		// return a podStatus with the container status
-		return []vc.PodStatus{
-			{
-				ID: d.pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: d.pod.ID(),
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
-							vcAnnotations.ConfigJSONKey:    d.configJSON,
-						},
-					},
-				},
+		// return a sandboxStatus with the container status
+		return vc.ContainerStatus{
+			ID: d.sandbox.ID(),
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+				vcAnnotations.ConfigJSONKey:    d.configJSON,
 			},
 		}, nil
 	}
 
-	testingImpl.StartContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.StartContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// now we can kill the fake container workload
 		err := d.process.Kill()
 		assert.NoError(err)
 
-		return d.pod.MockContainers[0], nil
+		return d.sandbox.MockContainers[0], nil
 	}
 
-	testingImpl.DeletePodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.DeleteSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.DeleteContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
-		return d.pod.MockContainers[0], nil
+	testingImpl.DeleteContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
+		return d.sandbox.MockContainers[0], nil
 	}
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
+		testingImpl.StatusContainerFunc = nil
 		testingImpl.StartContainerFunc = nil
-		testingImpl.DeletePodFunc = nil
+		testingImpl.DeleteSandboxFunc = nil
 		testingImpl.DeleteContainerFunc = nil
 	}()
 
-	err := run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
 
 	// should return ExitError with the message and exit code
 	e, ok := err.(*cli.ExitError)
@@ -309,68 +298,66 @@ func TestRunContainerDetachSuccessful(t *testing.T) {
 	d := testRunContainerSetup(t)
 	defer os.RemoveAll(d.tmpDir)
 
-	// this flags is used to detect if createPodFunc was called
+	// this flags is used to detect if createSandboxFunc was called
 	flagCreate := false
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
 		flagCreate = true
-		return d.pod, nil
+		return d.sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
+
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
 		// return an empty list on create
 		if !flagCreate {
-			return []vc.PodStatus{}, nil
+			return vc.ContainerStatus{}, nil
 		}
 
-		// return a podStatus with the container status
-		return []vc.PodStatus{
-			{
-				ID: d.pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: d.pod.ID(),
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
-							vcAnnotations.ConfigJSONKey:    d.configJSON,
-						},
-					},
-				},
+		// return a sandboxStatus with the container status
+		return vc.ContainerStatus{
+			ID: d.sandbox.ID(),
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+				vcAnnotations.ConfigJSONKey:    d.configJSON,
 			},
 		}, nil
 	}
 
-	testingImpl.StartContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.StartContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// now we can kill the fake container workload
 		err := d.process.Kill()
 		assert.NoError(err)
 
-		return d.pod.MockContainers[0], nil
+		return d.sandbox.MockContainers[0], nil
 	}
 
-	testingImpl.DeletePodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.DeleteSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.DeleteContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
-		return d.pod.MockContainers[0], nil
+	testingImpl.DeleteContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
+		return d.sandbox.MockContainers[0], nil
 	}
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
+		testingImpl.StatusContainerFunc = nil
 		testingImpl.StartContainerFunc = nil
-		testingImpl.DeletePodFunc = nil
+		testingImpl.DeleteSandboxFunc = nil
 		testingImpl.DeleteContainerFunc = nil
 	}()
 
-	err := run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, true, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, true, d.runtimeConfig)
 
 	// should not return ExitError
 	assert.NoError(err)
@@ -382,70 +369,68 @@ func TestRunContainerDeleteFail(t *testing.T) {
 	d := testRunContainerSetup(t)
 	defer os.RemoveAll(d.tmpDir)
 
-	// this flags is used to detect if createPodFunc was called
+	// this flags is used to detect if createSandboxFunc was called
 	flagCreate := false
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
 		flagCreate = true
-		return d.pod, nil
+		return d.sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
+
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
 		// return an empty list on create
 		if !flagCreate {
-			return []vc.PodStatus{}, nil
+			return vc.ContainerStatus{}, nil
 		}
 
-		// return a podStatus with the container status
-		return []vc.PodStatus{
-			{
-				ID: d.pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: d.pod.ID(),
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
-							vcAnnotations.ConfigJSONKey:    d.configJSON,
-						},
-					},
-				},
+		// return a sandboxStatus with the container status
+		return vc.ContainerStatus{
+			ID: d.sandbox.ID(),
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+				vcAnnotations.ConfigJSONKey:    d.configJSON,
 			},
 		}, nil
 	}
 
-	testingImpl.StartContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.StartContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// now we can kill the fake container workload
 		err := d.process.Kill()
 		assert.NoError(err)
 
-		return d.pod.MockContainers[0], nil
+		return d.sandbox.MockContainers[0], nil
 	}
 
-	testingImpl.DeletePodFunc = func(podID string) (vc.VCPod, error) {
+	testingImpl.DeleteSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
 		// return an error to provoke a failure in delete
-		return nil, fmt.Errorf("DeletePodFunc")
+		return nil, fmt.Errorf("DeleteSandboxFunc")
 	}
 
-	testingImpl.DeleteContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.DeleteContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// return an error to provoke a failure in delete
-		return d.pod.MockContainers[0], fmt.Errorf("DeleteContainerFunc")
+		return d.sandbox.MockContainers[0], fmt.Errorf("DeleteContainerFunc")
 	}
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
+		testingImpl.StatusContainerFunc = nil
 		testingImpl.StartContainerFunc = nil
-		testingImpl.DeletePodFunc = nil
+		testingImpl.DeleteSandboxFunc = nil
 		testingImpl.DeleteContainerFunc = nil
 	}()
 
-	err := run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
 
 	// should not return ExitError
 	err, ok := err.(*cli.ExitError)
@@ -458,73 +443,71 @@ func TestRunContainerWaitFail(t *testing.T) {
 	d := testRunContainerSetup(t)
 	defer os.RemoveAll(d.tmpDir)
 
-	// this flags is used to detect if createPodFunc was called
+	// this flags is used to detect if createSandboxFunc was called
 	flagCreate := false
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
 		flagCreate = true
-		return d.pod, nil
+		return d.sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
-		return d.pod, nil
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
+		return d.sandbox, nil
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
+
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
 		// return an empty list on create
 		if !flagCreate {
-			return []vc.PodStatus{}, nil
+			return vc.ContainerStatus{}, nil
 		}
 
-		// return a podStatus with the container status
-		return []vc.PodStatus{
-			{
-				ID: d.pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: d.pod.ID(),
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
-							vcAnnotations.ConfigJSONKey:    d.configJSON,
-						},
-					},
-				},
+		// return a sandboxStatus with the container status
+		return vc.ContainerStatus{
+			ID: d.sandbox.ID(),
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+				vcAnnotations.ConfigJSONKey:    d.configJSON,
 			},
 		}, nil
 	}
 
-	testingImpl.StartContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.StartContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// now we can kill the fake container workload
 		err := d.process.Kill()
 		assert.NoError(err)
 
 		// change PID to provoke a failure in Wait
-		d.pod.MockContainers[0].MockPid = -1
+		d.sandbox.MockContainers[0].MockPid = -1
 
-		return d.pod.MockContainers[0], nil
+		return d.sandbox.MockContainers[0], nil
 	}
 
-	testingImpl.DeletePodFunc = func(podID string) (vc.VCPod, error) {
+	testingImpl.DeleteSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
 		// return an error to provoke a failure in delete
-		return nil, fmt.Errorf("DeletePodFunc")
+		return nil, fmt.Errorf("DeleteSandboxFunc")
 	}
 
-	testingImpl.DeleteContainerFunc = func(podID, containerID string) (vc.VCContainer, error) {
+	testingImpl.DeleteContainerFunc = func(sandboxID, containerID string) (vc.VCContainer, error) {
 		// return an error to provoke a failure in delete
-		return d.pod.MockContainers[0], fmt.Errorf("DeleteContainerFunc")
+		return d.sandbox.MockContainers[0], fmt.Errorf("DeleteContainerFunc")
 	}
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
+		testingImpl.StatusContainerFunc = nil
 		testingImpl.StartContainerFunc = nil
-		testingImpl.DeletePodFunc = nil
+		testingImpl.DeleteSandboxFunc = nil
 		testingImpl.DeleteContainerFunc = nil
 	}()
 
-	err := run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
 
 	// should not return ExitError
 	err, ok := err.(*cli.ExitError)
@@ -541,115 +524,103 @@ func TestRunContainerStartFail(t *testing.T) {
 	err := d.process.Kill()
 	assert.NoError(err)
 
-	// this flags is used to detect if createPodFunc was called
+	// this flags is used to detect if createSandboxFunc was called
 	flagCreate := false
 
 	// fake functions used to run containers
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
 		flagCreate = true
-		return d.pod, nil
+		return d.sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
 		// start fails
-		return nil, fmt.Errorf("StartPod")
+		return nil, fmt.Errorf("StartSandbox")
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
+	path, err := ioutil.TempDir("", "containers-mapping")
+	assert.NoError(err)
+	defer os.RemoveAll(path)
+	ctrsMapTreePath = path
+
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
 		// return an empty list on create
 		if !flagCreate {
-			return []vc.PodStatus{}, nil
+			return vc.ContainerStatus{}, nil
 		}
 
-		// return a podStatus with the container status
-		return []vc.PodStatus{
-			{
-				ID: d.pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: d.pod.ID(),
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
-							vcAnnotations.ConfigJSONKey:    d.configJSON,
-						},
-					},
-				},
+		// return a sandboxStatus with the container status
+		return vc.ContainerStatus{
+			ID: d.sandbox.ID(),
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
+				vcAnnotations.ConfigJSONKey:    d.configJSON,
 			},
 		}, nil
 	}
 
 	defer func() {
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
-		testingImpl.ListPodFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
+		testingImpl.StatusContainerFunc = nil
 	}()
 
-	err = run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
 
 	// should not return ExitError
 	err, ok := err.(*cli.ExitError)
 	assert.False(ok, "error should not be a cli.ExitError: %s", err)
 }
 
-func TestRunContainerStartFailNoContainers(t *testing.T) {
+func TestRunContainerStartFailExistingContainer(t *testing.T) {
 	assert := assert.New(t)
-
-	listCallCount := 0
 
 	d := testRunContainerSetup(t)
 	defer os.RemoveAll(d.tmpDir)
 
-	pod := &vcmock.Pod{
-		MockID: testPodID,
+	sandbox := &vcmock.Sandbox{
+		MockID: testSandboxID,
 	}
 
-	pod.MockContainers = []*vcmock.Container{
+	sandbox.MockContainers = []*vcmock.Container{
 		{
-			MockID:  testContainerID,
-			MockPod: pod,
+			MockID:      testContainerID,
+			MockSandbox: sandbox,
 		},
 	}
 
-	testingImpl.ListPodFunc = func() ([]vc.PodStatus, error) {
-		listCallCount++
+	path, err := createTempContainerIDMapping(testContainerID, sandbox.ID())
+	assert.NoError(err)
+	defer os.RemoveAll(path)
 
-		if listCallCount == 1 {
-			return []vc.PodStatus{}, nil
-		}
-
-		return []vc.PodStatus{
-			{
-				ID: pod.ID(),
-				ContainersStatus: []vc.ContainerStatus{
-					{
-						ID: testContainerID,
-						Annotations: map[string]string{
-							vcAnnotations.ContainerTypeKey: string(vc.PodSandbox),
-						},
-					},
-				},
+	testingImpl.StatusContainerFunc = func(sandboxID, containerID string) (vc.ContainerStatus, error) {
+		// return the container status
+		return vc.ContainerStatus{
+			ID: testContainerID,
+			Annotations: map[string]string{
+				vcAnnotations.ContainerTypeKey: string(vc.PodContainer),
 			},
 		}, nil
 	}
 
-	testingImpl.CreatePodFunc = func(podConfig vc.PodConfig) (vc.VCPod, error) {
-		return pod, nil
+	testingImpl.CreateSandboxFunc = func(sandboxConfig vc.SandboxConfig) (vc.VCSandbox, error) {
+		return sandbox, nil
 	}
 
-	testingImpl.StartPodFunc = func(podID string) (vc.VCPod, error) {
+	testingImpl.StartSandboxFunc = func(sandboxID string) (vc.VCSandbox, error) {
 		// force no containers
-		pod.MockContainers = nil
+		sandbox.MockContainers = nil
 
-		return pod, nil
+		return sandbox, nil
 	}
 
 	defer func() {
-		testingImpl.ListPodFunc = nil
-		testingImpl.CreatePodFunc = nil
-		testingImpl.StartPodFunc = nil
+		testingImpl.StatusContainerFunc = nil
+		testingImpl.CreateSandboxFunc = nil
+		testingImpl.StartSandboxFunc = nil
 	}()
 
-	err := run(d.pod.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
+	err = run(d.sandbox.ID(), d.bundlePath, d.consolePath, "", d.pidFilePath, false, d.runtimeConfig)
 	assert.Error(err)
 	assert.False(vcmock.IsMockError(err))
 }

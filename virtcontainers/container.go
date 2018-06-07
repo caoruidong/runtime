@@ -1,17 +1,7 @@
-//
+// +build linux
 // Copyright (c) 2016 Intel Corporation
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright (c) 2014,2015,2016,2017 Docker, Inc.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -19,21 +9,30 @@ package virtcontainers
 import (
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/kata-containers/runtime/virtcontainers/pkg/annotations"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
+
+	"github.com/kata-containers/runtime/virtcontainers/device/api"
+	"github.com/kata-containers/runtime/virtcontainers/device/config"
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
+	"github.com/kata-containers/runtime/virtcontainers/utils"
 )
 
 // Process gathers data related to a container process.
 type Process struct {
 	// Token is the process execution context ID. It must be
-	// unique per pod.
+	// unique per sandbox.
 	// Token is used to manipulate processes for containers
 	// that have not started yet, and later identify them
-	// uniquely within a pod.
+	// uniquely within a sandbox.
 	Token string
 
 	// Pid is the process ID as seen by the host software
@@ -58,17 +57,126 @@ type ContainerStatus struct {
 	Annotations map[string]string
 }
 
+// ThrottlingData gather the date related to container cpu throttling.
+type ThrottlingData struct {
+	// Number of periods with throttling active
+	Periods uint64 `json:"periods,omitempty"`
+	// Number of periods when the container hit its throttling limit.
+	ThrottledPeriods uint64 `json:"throttled_periods,omitempty"`
+	// Aggregate time the container was throttled for in nanoseconds.
+	ThrottledTime uint64 `json:"throttled_time,omitempty"`
+}
+
+// CPUUsage denotes the usage of a CPU.
+// All CPU stats are aggregate since container inception.
+type CPUUsage struct {
+	// Total CPU time consumed.
+	// Units: nanoseconds.
+	TotalUsage uint64 `json:"total_usage,omitempty"`
+	// Total CPU time consumed per core.
+	// Units: nanoseconds.
+	PercpuUsage []uint64 `json:"percpu_usage,omitempty"`
+	// Time spent by tasks of the cgroup in kernel mode.
+	// Units: nanoseconds.
+	UsageInKernelmode uint64 `json:"usage_in_kernelmode"`
+	// Time spent by tasks of the cgroup in user mode.
+	// Units: nanoseconds.
+	UsageInUsermode uint64 `json:"usage_in_usermode"`
+}
+
+// CPUStats describes the cpu stats
+type CPUStats struct {
+	CPUUsage       CPUUsage       `json:"cpu_usage,omitempty"`
+	ThrottlingData ThrottlingData `json:"throttling_data,omitempty"`
+}
+
+// MemoryData gather the data related to memory
+type MemoryData struct {
+	Usage    uint64 `json:"usage,omitempty"`
+	MaxUsage uint64 `json:"max_usage,omitempty"`
+	Failcnt  uint64 `json:"failcnt"`
+	Limit    uint64 `json:"limit"`
+}
+
+// MemoryStats describes the memory stats
+type MemoryStats struct {
+	// memory used for cache
+	Cache uint64 `json:"cache,omitempty"`
+	// usage of memory
+	Usage MemoryData `json:"usage,omitempty"`
+	// usage of memory  swap
+	SwapUsage MemoryData `json:"swap_usage,omitempty"`
+	// usage of kernel memory
+	KernelUsage MemoryData `json:"kernel_usage,omitempty"`
+	// usage of kernel TCP memory
+	KernelTCPUsage MemoryData `json:"kernel_tcp_usage,omitempty"`
+	// if true, memory usage is accounted for throughout a hierarchy of cgroups.
+	UseHierarchy bool `json:"use_hierarchy"`
+
+	Stats map[string]uint64 `json:"stats,omitempty"`
+}
+
+// PidsStats describes the pids stats
+type PidsStats struct {
+	// number of pids in the cgroup
+	Current uint64 `json:"current,omitempty"`
+	// active pids hard limit
+	Limit uint64 `json:"limit,omitempty"`
+}
+
+// BlkioStatEntry gather date related to a block device
+type BlkioStatEntry struct {
+	Major uint64 `json:"major,omitempty"`
+	Minor uint64 `json:"minor,omitempty"`
+	Op    string `json:"op,omitempty"`
+	Value uint64 `json:"value,omitempty"`
+}
+
+// BlkioStats describes block io stats
+type BlkioStats struct {
+	// number of bytes tranferred to and from the block device
+	IoServiceBytesRecursive []BlkioStatEntry `json:"io_service_bytes_recursive,omitempty"`
+	IoServicedRecursive     []BlkioStatEntry `json:"io_serviced_recursive,omitempty"`
+	IoQueuedRecursive       []BlkioStatEntry `json:"io_queue_recursive,omitempty"`
+	IoServiceTimeRecursive  []BlkioStatEntry `json:"io_service_time_recursive,omitempty"`
+	IoWaitTimeRecursive     []BlkioStatEntry `json:"io_wait_time_recursive,omitempty"`
+	IoMergedRecursive       []BlkioStatEntry `json:"io_merged_recursive,omitempty"`
+	IoTimeRecursive         []BlkioStatEntry `json:"io_time_recursive,omitempty"`
+	SectorsRecursive        []BlkioStatEntry `json:"sectors_recursive,omitempty"`
+}
+
+// HugetlbStats describes hugetable memory stats
+type HugetlbStats struct {
+	// current res_counter usage for hugetlb
+	Usage uint64 `json:"usage,omitempty"`
+	// maximum usage ever recorded.
+	MaxUsage uint64 `json:"max_usage,omitempty"`
+	// number of times hugetlb usage allocation failure.
+	Failcnt uint64 `json:"failcnt"`
+}
+
+// CgroupStats describes all cgroup subsystem stats
+type CgroupStats struct {
+	CPUStats    CPUStats    `json:"cpu_stats,omitempty"`
+	MemoryStats MemoryStats `json:"memory_stats,omitempty"`
+	PidsStats   PidsStats   `json:"pids_stats,omitempty"`
+	BlkioStats  BlkioStats  `json:"blkio_stats,omitempty"`
+	// the map is in the format "size of hugepage: stats of the hugepage"
+	HugetlbStats map[string]HugetlbStats `json:"hugetlb_stats,omitempty"`
+}
+
+// ContainerStats describes a container stats.
+type ContainerStats struct {
+	CgroupStats *CgroupStats
+}
+
 // ContainerResources describes container resources
 type ContainerResources struct {
-	// CPUQuota specifies the total amount of time in microseconds
-	// The number of microseconds per CPUPeriod that the container is guaranteed CPU access
-	CPUQuota int64
+	// VCPUs are the number of vCPUs that are being used by the container
+	VCPUs uint32
 
-	// CPUPeriod specifies the CPU CFS scheduler period of time in microseconds
-	CPUPeriod uint64
-
-	// CPUShares specifies container's weight vs. other containers
-	CPUShares uint64
+	// Mem is the memory that is being used by the container
+	Mem uint32
 }
 
 // ContainerConfig describes one container runtime configuration.
@@ -92,7 +200,7 @@ type ContainerConfig struct {
 	Mounts []Mount
 
 	// Device configuration for devices that must be available within the container.
-	DeviceInfos []DeviceInfo
+	DeviceInfos []config.DeviceInfo
 
 	// Resources container resources
 	Resources ContainerResources
@@ -124,14 +232,14 @@ type SystemMountsInfo struct {
 // Container is composed of a set of containers and a runtime environment.
 // A Container can be created, deleted, started, stopped, listed, entered, paused and restored.
 type Container struct {
-	id    string
-	podID string
+	id        string
+	sandboxID string
 
 	rootFs string
 
 	config *ContainerConfig
 
-	pod *Pod
+	sandbox *Sandbox
 
 	runPath       string
 	configPath    string
@@ -143,7 +251,7 @@ type Container struct {
 
 	mounts []Mount
 
-	devices []Device
+	devices []api.Device
 
 	systemMountsInfo SystemMountsInfo
 }
@@ -158,13 +266,13 @@ func (c *Container) Logger() *logrus.Entry {
 	return virtLog.WithFields(logrus.Fields{
 		"subsystem":    "container",
 		"container-id": c.id,
-		"pod-id":       c.podID,
+		"sandbox-id":   c.sandboxID,
 	})
 }
 
-// Pod returns the pod handler related to this container.
-func (c *Container) Pod() VCPod {
-	return c.pod
+// Sandbox returns the sandbox handler related to this container.
+func (c *Container) Sandbox() VCSandbox {
+	return c.sandbox
 }
 
 // Process returns the container process.
@@ -192,7 +300,7 @@ func (c *Container) SetPid(pid int) error {
 func (c *Container) setStateBlockIndex(index int) error {
 	c.state.BlockIndex = index
 
-	err := c.pod.storage.storeContainerResource(c.pod.id, c.id, stateFileType, c.state)
+	err := c.sandbox.storage.storeContainerResource(c.sandbox.id, c.id, stateFileType, c.state)
 	if err != nil {
 		return err
 	}
@@ -203,7 +311,7 @@ func (c *Container) setStateBlockIndex(index int) error {
 func (c *Container) setStateFstype(fstype string) error {
 	c.state.Fstype = fstype
 
-	err := c.pod.storage.storeContainerResource(c.pod.id, c.id, stateFileType, c.state)
+	err := c.sandbox.storage.storeContainerResource(c.sandbox.id, c.id, stateFileType, c.state)
 	if err != nil {
 		return err
 	}
@@ -214,7 +322,18 @@ func (c *Container) setStateFstype(fstype string) error {
 func (c *Container) setStateHotpluggedDrive(hotplugged bool) error {
 	c.state.HotpluggedDrive = hotplugged
 
-	err := c.pod.storage.storeContainerResource(c.pod.id, c.id, stateFileType, c.state)
+	err := c.sandbox.storage.storeContainerResource(c.sandbox.id, c.id, stateFileType, c.state)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Container) setContainerRootfsPCIAddr(addr string) error {
+	c.state.RootfsPCIAddr = addr
+
+	err := c.sandbox.storage.storeContainerResource(c.sandbox.id, c.id, stateFileType, c.state)
 	if err != nil {
 		return err
 	}
@@ -228,29 +347,29 @@ func (c *Container) GetAnnotations() map[string]string {
 }
 
 func (c *Container) storeProcess() error {
-	return c.pod.storage.storeContainerProcess(c.podID, c.id, c.process)
+	return c.sandbox.storage.storeContainerProcess(c.sandboxID, c.id, c.process)
 }
 
 func (c *Container) storeMounts() error {
-	return c.pod.storage.storeContainerMounts(c.podID, c.id, c.mounts)
+	return c.sandbox.storage.storeContainerMounts(c.sandboxID, c.id, c.mounts)
 }
 
 func (c *Container) fetchMounts() ([]Mount, error) {
-	return c.pod.storage.fetchContainerMounts(c.podID, c.id)
+	return c.sandbox.storage.fetchContainerMounts(c.sandboxID, c.id)
 }
 
 func (c *Container) storeDevices() error {
-	return c.pod.storage.storeContainerDevices(c.podID, c.id, c.devices)
+	return c.sandbox.storage.storeContainerDevices(c.sandboxID, c.id, c.devices)
 }
 
-func (c *Container) fetchDevices() ([]Device, error) {
-	return c.pod.storage.fetchContainerDevices(c.podID, c.id)
+func (c *Container) fetchDevices() ([]api.Device, error) {
+	return c.sandbox.storage.fetchContainerDevices(c.sandboxID, c.id)
 }
 
 // storeContainer stores a container config.
 func (c *Container) storeContainer() error {
 	fs := filesystem{}
-	err := fs.storeContainerResource(c.pod.id, c.id, configFileType, *(c.config))
+	err := fs.storeContainerResource(c.sandbox.id, c.id, configFileType, *(c.config))
 	if err != nil {
 		return err
 	}
@@ -269,7 +388,7 @@ func (c *Container) setContainerState(state stateString) error {
 	c.state.State = state
 
 	// update on-disk state
-	err := c.pod.storage.storeContainerResource(c.pod.id, c.id, stateFileType, c.state)
+	err := c.sandbox.storage.storeContainerResource(c.sandbox.id, c.id, stateFileType, c.state)
 	if err != nil {
 		return err
 	}
@@ -285,7 +404,7 @@ func (c *Container) createContainersDirs() error {
 
 	err = os.MkdirAll(c.configPath, dirMode)
 	if err != nil {
-		c.pod.storage.deleteContainerResources(c.podID, c.id, nil)
+		c.sandbox.storage.deleteContainerResources(c.sandboxID, c.id, nil)
 		return err
 	}
 
@@ -300,18 +419,59 @@ func (c *Container) createContainersDirs() error {
 func (c *Container) mountSharedDirMounts(hostSharedDir, guestSharedDir string) ([]Mount, error) {
 	var sharedDirMounts []Mount
 	for idx, m := range c.mounts {
-		if m.Type != "bind" {
+		if isSystemMount(m.Destination) || m.Type != "bind" {
 			continue
 		}
 
-		randBytes, err := generateRandomBytes(8)
+		// We need to treat /dev/shm as a special case. This is passed as a bind mount in the spec,
+		// but it does not make sense to pass this as a 9p mount from the host side.
+		// This needs to be handled purely in the guest, by allocating memory for this inside the VM.
+		if m.Destination == "/dev/shm" {
+			continue
+		}
+
+		var stat unix.Stat_t
+		if err := unix.Stat(m.Source, &stat); err != nil {
+			return nil, err
+		}
+
+		// Check if mount is a block device file. If it is, the block device will be attached to the host
+		// instead of passing this as a shared mount.
+		if c.checkBlockDeviceSupport() && stat.Mode&unix.S_IFBLK == unix.S_IFBLK {
+			// TODO: remove dependency of package drivers
+			b := &drivers.BlockDevice{
+				DevType: config.DeviceBlock,
+				DeviceInfo: config.DeviceInfo{
+					HostPath:      m.Source,
+					ContainerPath: m.Destination,
+					DevType:       "b",
+				},
+			}
+
+			// Attach this block device, all other devices passed in the config have been attached at this point
+			if err := b.Attach(c.sandbox); err != nil {
+				return nil, err
+			}
+
+			c.mounts[idx].BlockDevice = b
+			continue
+		}
+
+		// Ignore /dev, directories and all other device files. We handle
+		// only regular files in /dev. It does not make sense to pass the host
+		// device nodes to the guest.
+		if isHostDevice(m.Destination) {
+			continue
+		}
+
+		randBytes, err := utils.GenerateRandomBytes(8)
 		if err != nil {
 			return nil, err
 		}
 
 		// These mounts are created in the shared dir
 		filename := fmt.Sprintf("%s-%s-%s", c.id, hex.EncodeToString(randBytes), filepath.Base(m.Destination))
-		mountDest := filepath.Join(hostSharedDir, c.pod.id, filename)
+		mountDest := filepath.Join(hostSharedDir, c.sandbox.id, filename)
 
 		if err := bindMount(m.Source, mountDest, false); err != nil {
 			return nil, err
@@ -363,32 +523,32 @@ func (c *Container) unmountHostMounts() error {
 	return nil
 }
 
-// newContainer creates a Container structure from a pod and a container configuration.
-func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
+// newContainer creates a Container structure from a sandbox and a container configuration.
+func newContainer(sandbox *Sandbox, contConfig ContainerConfig) (*Container, error) {
 	if contConfig.valid() == false {
 		return &Container{}, fmt.Errorf("Invalid container configuration")
 	}
 
 	c := &Container{
 		id:            contConfig.ID,
-		podID:         pod.id,
+		sandboxID:     sandbox.id,
 		rootFs:        contConfig.RootFs,
 		config:        &contConfig,
-		pod:           pod,
-		runPath:       filepath.Join(runStoragePath, pod.id, contConfig.ID),
-		configPath:    filepath.Join(configStoragePath, pod.id, contConfig.ID),
-		containerPath: filepath.Join(pod.id, contConfig.ID),
+		sandbox:       sandbox,
+		runPath:       filepath.Join(runStoragePath, sandbox.id, contConfig.ID),
+		configPath:    filepath.Join(configStoragePath, sandbox.id, contConfig.ID),
+		containerPath: filepath.Join(sandbox.id, contConfig.ID),
 		state:         State{},
 		process:       Process{},
 		mounts:        contConfig.Mounts,
 	}
 
-	state, err := c.pod.storage.fetchContainerState(c.podID, c.id)
+	state, err := c.sandbox.storage.fetchContainerState(c.sandboxID, c.id)
 	if err == nil {
 		c.state = state
 	}
 
-	process, err := c.pod.storage.fetchContainerProcess(c.podID, c.id)
+	process, err := c.sandbox.storage.fetchContainerProcess(c.sandboxID, c.id)
 	if err == nil {
 		c.process = process
 	}
@@ -407,7 +567,7 @@ func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
 		// If devices were not found in storage, create Device implementations
 		// from the configuration. This should happen at create.
 
-		devices, err := newDevices(contConfig.DeviceInfos)
+		devices, err := sandbox.devManager.NewDevices(contConfig.DeviceInfos)
 		if err != nil {
 			return &Container{}, err
 		}
@@ -416,63 +576,101 @@ func newContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
 	return c, nil
 }
 
-// createContainer creates and start a container inside a Pod. It has to be
-// called only when a new container, not known by the pod, has to be created.
-func createContainer(pod *Pod, contConfig ContainerConfig) (*Container, error) {
-	if pod == nil {
-		return nil, errNeedPod
+// rollbackFailingContainerCreation rolls back important steps that might have
+// been performed before the container creation failed.
+// - Unplug CPU and memory resources from the VM.
+// - Unplug devices from the VM.
+func (c *Container) rollbackFailingContainerCreation() {
+	if err := c.removeResources(); err != nil {
+		c.Logger().WithError(err).Error("rollback failed removeResources()")
 	}
-
-	c, err := newContainer(pod, contConfig)
-	if err != nil {
-		return nil, err
+	if err := c.detachDevices(); err != nil {
+		c.Logger().WithError(err).Error("rollback failed detachDevices()")
 	}
-
-	if err := c.createContainersDirs(); err != nil {
-		return nil, err
+	if err := c.removeDrive(); err != nil {
+		c.Logger().WithError(err).Error("rollback failed removeDrive()")
 	}
+}
 
-	if !c.pod.config.HypervisorConfig.DisableBlockDeviceUse {
-		agentCaps := c.pod.agent.capabilities()
-		hypervisorCaps := c.pod.hypervisor.capabilities()
+func (c *Container) checkBlockDeviceSupport() bool {
+	if !c.sandbox.config.HypervisorConfig.DisableBlockDeviceUse {
+		agentCaps := c.sandbox.agent.capabilities()
+		hypervisorCaps := c.sandbox.hypervisor.capabilities()
 
 		if agentCaps.isBlockDeviceSupported() && hypervisorCaps.isBlockDeviceHotplugSupported() {
-			if err := c.hotplugDrive(); err != nil {
-				return nil, err
-			}
+			return true
+		}
+	}
+
+	return false
+}
+
+// createContainer creates and start a container inside a Sandbox. It has to be
+// called only when a new container, not known by the sandbox, has to be created.
+func createContainer(sandbox *Sandbox, contConfig ContainerConfig) (c *Container, err error) {
+	if sandbox == nil {
+		return nil, errNeedSandbox
+	}
+
+	c, err = newContainer(sandbox, contConfig)
+	if err != nil {
+		return
+	}
+
+	if err = c.createContainersDirs(); err != nil {
+		return
+	}
+
+	// In case the container creation fails, the following takes care
+	// of rolling back all the actions previously performed.
+	defer func() {
+		if err != nil {
+			c.rollbackFailingContainerCreation()
+		}
+	}()
+
+	if c.checkBlockDeviceSupport() {
+		if err = c.hotplugDrive(); err != nil {
+			return
 		}
 	}
 
 	// Attach devices
-	if err := c.attachDevices(); err != nil {
-		return nil, err
+	if err = c.attachDevices(); err != nil {
+		return
 	}
 
-	if err := c.addResources(); err != nil {
-		return nil, err
+	if err = c.addResources(); err != nil {
+		return
 	}
 
 	// Deduce additional system mount info that should be handled by the agent
 	// inside the VM
 	c.getSystemMountInfo()
 
-	if err := c.storeDevices(); err != nil {
-		return nil, err
+	if err = c.storeDevices(); err != nil {
+		return
 	}
 
-	process, err := pod.agent.createContainer(c.pod, c)
+	process, err := sandbox.agent.createContainer(c.sandbox, c)
 	if err != nil {
-		return nil, err
+		return c, err
 	}
 	c.process = *process
 
-	// Store the container process returned by the agent.
-	if err := c.storeProcess(); err != nil {
-		return nil, err
+	// If this is a sandbox container, store the pid for sandbox
+	ann := c.GetAnnotations()
+	if ann[annotations.ContainerTypeKey] == string(PodSandbox) {
+		sandbox.setSandboxPid(c.process.Pid)
 	}
 
-	if err := c.setContainerState(StateReady); err != nil {
-		return nil, err
+	// Store the container process returned by the agent.
+	if err = c.storeProcess(); err != nil {
+		return
+	}
+
+	if err = c.setContainerState(StateReady); err != nil {
+		return
 	}
 
 	return c, nil
@@ -484,26 +682,26 @@ func (c *Container) delete() error {
 		return fmt.Errorf("Container not ready or stopped, impossible to delete")
 	}
 
-	// Remove the container from pod structure
-	if err := c.pod.removeContainer(c.id); err != nil {
+	// Remove the container from sandbox structure
+	if err := c.sandbox.removeContainer(c.id); err != nil {
 		return err
 	}
 
-	return c.pod.storage.deleteContainerResources(c.podID, c.id, nil)
+	return c.sandbox.storage.deleteContainerResources(c.sandboxID, c.id, nil)
 }
 
-// checkPodRunning validates the container state.
+// checkSandboxRunning validates the container state.
 //
 // cmd specifies the operation (or verb) that the retrieval is destined
 // for and is only used to make the returned error as descriptive as
 // possible.
-func (c *Container) checkPodRunning(cmd string) error {
+func (c *Container) checkSandboxRunning(cmd string) error {
 	if cmd == "" {
 		return fmt.Errorf("Cmd cannot be empty")
 	}
 
-	if c.pod.state.State != StateRunning {
-		return fmt.Errorf("Pod not running, impossible to %s the container", cmd)
+	if c.sandbox.state.State != StateRunning {
+		return fmt.Errorf("Sandbox not running, impossible to %s the container", cmd)
 	}
 
 	return nil
@@ -523,7 +721,7 @@ func (c *Container) getSystemMountInfo() {
 }
 
 func (c *Container) start() error {
-	if err := c.checkPodRunning("start"); err != nil {
+	if err := c.checkSandboxRunning("start"); err != nil {
 		return err
 	}
 
@@ -536,7 +734,7 @@ func (c *Container) start() error {
 		return err
 	}
 
-	if err := c.pod.agent.startContainer(*(c.pod), c); err != nil {
+	if err := c.sandbox.agent.startContainer(c.sandbox, c); err != nil {
 		c.Logger().WithError(err).Error("Failed to start container")
 
 		if err := c.stop(); err != nil {
@@ -561,8 +759,8 @@ func (c *Container) stop() error {
 		return nil
 	}
 
-	if c.pod.state.State != StateReady && c.pod.state.State != StateRunning {
-		return fmt.Errorf("Pod not ready or running, impossible to stop the container")
+	if c.sandbox.state.State != StateReady && c.sandbox.state.State != StateRunning {
+		return fmt.Errorf("Sandbox not ready or running, impossible to stop the container")
 	}
 
 	if err := c.state.validTransition(c.state.State, StateStopped); err != nil {
@@ -590,7 +788,7 @@ func (c *Container) stop() error {
 	// return an error, but instead try to kill it forcefully.
 	if err := waitForShim(c.process.Pid); err != nil {
 		// Force the container to be killed.
-		if err := c.pod.agent.killContainer(*(c.pod), *c, syscall.SIGKILL, true); err != nil {
+		if err := c.kill(syscall.SIGKILL, true); err != nil {
 			return err
 		}
 
@@ -603,7 +801,17 @@ func (c *Container) stop() error {
 		}
 	}
 
-	if err := c.pod.agent.stopContainer(*(c.pod), *c); err != nil {
+	// Force the container to be killed. For most of the cases, this
+	// should not matter and it should return an error that will be
+	// ignored.
+	// But for the specific case where the shim has been SIGKILL'ed,
+	// the container is still running inside the VM. And this is why
+	// this signal will ensure the container will get killed to match
+	// the state of the shim. This will allow the following call to
+	// stopContainer() to succeed in such particular case.
+	c.kill(syscall.SIGKILL, true)
+
+	if err := c.sandbox.agent.stopContainer(c.sandbox, *c); err != nil {
 		return err
 	}
 
@@ -623,7 +831,7 @@ func (c *Container) stop() error {
 }
 
 func (c *Container) enter(cmd Cmd) (*Process, error) {
-	if err := c.checkPodRunning("enter"); err != nil {
+	if err := c.checkSandboxRunning("enter"); err != nil {
 		return nil, err
 	}
 
@@ -633,7 +841,7 @@ func (c *Container) enter(cmd Cmd) (*Process, error) {
 			"impossible to enter")
 	}
 
-	process, err := c.pod.agent.exec(c.pod, *c, cmd)
+	process, err := c.sandbox.agent.exec(c.sandbox, *c, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -641,20 +849,52 @@ func (c *Container) enter(cmd Cmd) (*Process, error) {
 	return process, nil
 }
 
-func (c *Container) kill(signal syscall.Signal, all bool) error {
-	if c.pod.state.State != StateReady && c.pod.state.State != StateRunning {
-		return fmt.Errorf("Pod not ready or running, impossible to signal the container")
+func (c *Container) wait(processID string) (int32, error) {
+	if c.state.State != StateReady &&
+		c.state.State != StateRunning {
+		return 0, fmt.Errorf("Container not ready or running, " +
+			"impossible to wait")
 	}
 
+	return c.sandbox.agent.waitProcess(c, processID)
+}
+
+func (c *Container) kill(signal syscall.Signal, all bool) error {
+	return c.signalProcess(c.process.Token, signal, all)
+}
+
+func (c *Container) signalProcess(processID string, signal syscall.Signal, all bool) error {
+	if c.sandbox.state.State != StateReady && c.sandbox.state.State != StateRunning {
+		return fmt.Errorf("Sandbox not ready or running, impossible to signal the container")
+	}
+
+	if c.state.State != StateReady && c.state.State != StateRunning && c.state.State != StatePaused {
+		return fmt.Errorf("Container not ready, running or paused, impossible to signal the container")
+	}
+
+	return c.sandbox.agent.signalProcess(c, processID, signal, all)
+}
+
+func (c *Container) winsizeProcess(processID string, height, width uint32) error {
 	if c.state.State != StateReady && c.state.State != StateRunning {
 		return fmt.Errorf("Container not ready or running, impossible to signal the container")
 	}
 
-	return c.pod.agent.killContainer(*(c.pod), *c, signal, all)
+	return c.sandbox.agent.winsizeProcess(c, processID, height, width)
+}
+
+func (c *Container) ioStream(processID string) (io.WriteCloser, io.Reader, io.Reader, error) {
+	if c.state.State != StateReady && c.state.State != StateRunning {
+		return nil, nil, nil, fmt.Errorf("Container not ready or running, impossible to signal the container")
+	}
+
+	stream := newIOStream(c.sandbox, c, processID)
+
+	return stream.stdin(), stream.stdout(), stream.stderr(), nil
 }
 
 func (c *Container) processList(options ProcessListOptions) (ProcessList, error) {
-	if err := c.checkPodRunning("ps"); err != nil {
+	if err := c.checkSandboxRunning("ps"); err != nil {
 		return nil, err
 	}
 
@@ -662,7 +902,72 @@ func (c *Container) processList(options ProcessListOptions) (ProcessList, error)
 		return nil, fmt.Errorf("Container not running, impossible to list processes")
 	}
 
-	return c.pod.agent.processListContainer(*(c.pod), *c, options)
+	return c.sandbox.agent.processListContainer(c.sandbox, *c, options)
+}
+
+func (c *Container) stats() (*ContainerStats, error) {
+	if err := c.checkSandboxRunning("stats"); err != nil {
+		return nil, err
+	}
+	return c.sandbox.agent.statsContainer(c.sandbox, *c)
+}
+
+func (c *Container) update(resources specs.LinuxResources) error {
+	if err := c.checkSandboxRunning("update"); err != nil {
+		return err
+	}
+
+	if c.state.State != StateRunning {
+		return fmt.Errorf("Container not running, impossible to update")
+	}
+
+	// fetch current configuration
+	currentConfig, err := c.sandbox.storage.fetchContainerConfig(c.sandbox.id, c.id)
+	if err != nil {
+		return err
+	}
+
+	newResources := ContainerResources{
+		VCPUs: uint32(utils.ConstraintsToVCPUs(*resources.CPU.Quota, *resources.CPU.Period)),
+	}
+
+	if err := c.updateResources(currentConfig.Resources, newResources); err != nil {
+		return err
+	}
+
+	return c.sandbox.agent.updateContainer(c.sandbox, *c, resources)
+}
+
+func (c *Container) pause() error {
+	if err := c.checkSandboxRunning("pause"); err != nil {
+		return err
+	}
+
+	if c.state.State != StateRunning && c.state.State != StateReady {
+		return fmt.Errorf("Container not running or ready, impossible to pause")
+	}
+
+	if err := c.sandbox.agent.pauseContainer(c.sandbox, *c); err != nil {
+		return err
+	}
+
+	return c.setContainerState(StatePaused)
+}
+
+func (c *Container) resume() error {
+	if err := c.checkSandboxRunning("resume"); err != nil {
+		return err
+	}
+
+	if c.state.State != StatePaused {
+		return fmt.Errorf("Container not paused, impossible to resume")
+	}
+
+	if err := c.sandbox.agent.resumeContainer(c.sandbox, *c); err != nil {
+		return err
+	}
+
+	return c.setContainerState(StateRunning)
 }
 
 func (c *Container) hotplugDrive() error {
@@ -702,23 +1007,28 @@ func (c *Container) hotplugDrive() error {
 		"fs-type":     fsType,
 	}).Info("Block device detected")
 
-	driveIndex, err := c.pod.getAndSetPodBlockIndex()
+	driveIndex, err := c.sandbox.getAndSetSandboxBlockIndex()
 	if err != nil {
 		return err
 	}
 
 	// Add drive with id as container id
-	devID := makeNameID("drive", c.id)
-	drive := Drive{
+	devID := utils.MakeNameID("drive", c.id, maxDevIDSize)
+	drive := drivers.Drive{
 		File:   devicePath,
 		Format: "raw",
 		ID:     devID,
 		Index:  driveIndex,
 	}
 
-	if err := c.pod.hypervisor.hotplugAddDevice(drive, blockDev); err != nil {
+	if _, err := c.sandbox.hypervisor.hotplugAddDevice(&drive, blockDev); err != nil {
 		return err
 	}
+
+	if drive.PCIAddr != "" {
+		c.setContainerRootfsPCIAddr(drive.PCIAddr)
+	}
+
 	c.setStateHotpluggedDrive(true)
 
 	if err := c.setStateBlockIndex(driveIndex); err != nil {
@@ -740,15 +1050,15 @@ func (c *Container) removeDrive() (err error) {
 	if c.isDriveUsed() && c.state.HotpluggedDrive {
 		c.Logger().Info("unplugging block device")
 
-		devID := makeNameID("drive", c.id)
-		drive := Drive{
+		devID := utils.MakeNameID("drive", c.id, maxDevIDSize)
+		drive := &drivers.Drive{
 			ID: devID,
 		}
 
 		l := c.Logger().WithField("device-id", devID)
 		l.Info("Unplugging block device")
 
-		if err := c.pod.hypervisor.hotplugRemoveDevice(drive, blockDev); err != nil {
+		if _, err := c.sandbox.hypervisor.hotplugRemoveDevice(drive, blockDev); err != nil {
 			l.WithError(err).Info("Failed to unplug block device")
 			return err
 		}
@@ -759,7 +1069,7 @@ func (c *Container) removeDrive() (err error) {
 
 func (c *Container) attachDevices() error {
 	for _, device := range c.devices {
-		if err := device.attach(c.pod.hypervisor, c); err != nil {
+		if err := device.Attach(c.sandbox); err != nil {
 			return err
 		}
 	}
@@ -769,7 +1079,7 @@ func (c *Container) attachDevices() error {
 
 func (c *Container) detachDevices() error {
 	for _, device := range c.devices {
-		if err := device.detach(c.pod.hypervisor); err != nil {
+		if err := device.Detach(c.sandbox); err != nil {
 			return err
 		}
 	}
@@ -783,14 +1093,31 @@ func (c *Container) addResources() error {
 		return nil
 	}
 
-	vCPUs := ConstraintsToVCPUs(c.config.Resources.CPUQuota, c.config.Resources.CPUPeriod)
+	// Container is being created, try to add the number of vCPUs specified
+	vCPUs := c.config.Resources.VCPUs
 	if vCPUs != 0 {
 		virtLog.Debugf("hot adding %d vCPUs", vCPUs)
-		if err := c.pod.hypervisor.hotplugAddDevice(uint32(vCPUs), cpuDev); err != nil {
+		data, err := c.sandbox.hypervisor.hotplugAddDevice(vCPUs, cpuDev)
+		if err != nil {
 			return err
 		}
 
-		return c.pod.agent.onlineCPUMem()
+		vcpusAdded, ok := data.(uint32)
+		if !ok {
+			return fmt.Errorf("Could not get the number of vCPUs added, got %+v", data)
+		}
+
+		// A different number of vCPUs was added, we have to update
+		// the resources in order to don't remove vCPUs used by other containers.
+		if vcpusAdded != vCPUs {
+			// Set and save container's config
+			c.config.Resources.VCPUs = vcpusAdded
+			if err := c.storeContainer(); err != nil {
+				return err
+			}
+		}
+
+		return c.sandbox.agent.onlineCPUMem(vcpusAdded)
 	}
 
 	return nil
@@ -802,13 +1129,76 @@ func (c *Container) removeResources() error {
 		return nil
 	}
 
-	vCPUs := ConstraintsToVCPUs(c.config.Resources.CPUQuota, c.config.Resources.CPUPeriod)
+	// In order to don't remove vCPUs used by other containers, we have to remove
+	// only the vCPUs assigned to the container
+	config, err := c.sandbox.storage.fetchContainerConfig(c.sandbox.id, c.id)
+	if err != nil {
+		// don't fail, let's use the default configuration
+		config = *c.config
+	}
+
+	vCPUs := config.Resources.VCPUs
 	if vCPUs != 0 {
 		virtLog.Debugf("hot removing %d vCPUs", vCPUs)
-		if err := c.pod.hypervisor.hotplugRemoveDevice(uint32(vCPUs), cpuDev); err != nil {
+		if _, err := c.sandbox.hypervisor.hotplugRemoveDevice(vCPUs, cpuDev); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (c *Container) updateResources(oldResources, newResources ContainerResources) error {
+	//TODO add support for memory, Issue: https://github.com/containers/virtcontainers/issues/578
+	var vCPUs uint32
+	oldVCPUs := oldResources.VCPUs
+	newVCPUs := newResources.VCPUs
+
+	// Update vCPUs is not possible if period and/or quota are not set or
+	// oldVCPUs and newVCPUs are equal.
+	// Don't fail, the constraint still can be applied in the cgroup.
+	if newVCPUs == 0 || oldVCPUs == newVCPUs {
+		c.Logger().WithFields(logrus.Fields{
+			"old-vcpus": fmt.Sprintf("%d", oldVCPUs),
+			"new-vcpus": fmt.Sprintf("%d", newVCPUs),
+		}).Debug("the actual number of vCPUs will not be modified")
+		return nil
+	}
+
+	if oldVCPUs < newVCPUs {
+		// hot add vCPUs
+		vCPUs = newVCPUs - oldVCPUs
+		virtLog.Debugf("hot adding %d vCPUs", vCPUs)
+		data, err := c.sandbox.hypervisor.hotplugAddDevice(vCPUs, cpuDev)
+		if err != nil {
+			return err
+		}
+		vcpusAdded, ok := data.(uint32)
+		if !ok {
+			return fmt.Errorf("Could not get the number of vCPUs added, got %+v", data)
+		}
+		// recalculate the actual number of vCPUs if a different number of vCPUs was added
+		newResources.VCPUs = oldVCPUs + vcpusAdded
+		if err := c.sandbox.agent.onlineCPUMem(vcpusAdded); err != nil {
+			return err
+		}
+	} else {
+		// hot remove vCPUs
+		vCPUs = oldVCPUs - newVCPUs
+		virtLog.Debugf("hot removing %d vCPUs", vCPUs)
+		data, err := c.sandbox.hypervisor.hotplugRemoveDevice(vCPUs, cpuDev)
+		if err != nil {
+			return err
+		}
+		vcpusRemoved, ok := data.(uint32)
+		if !ok {
+			return fmt.Errorf("Could not get the number of vCPUs removed, got %+v", data)
+		}
+		// recalculate the actual number of vCPUs if a different number of vCPUs was removed
+		newResources.VCPUs = oldVCPUs - vcpusRemoved
+	}
+
+	// Set and save container's config
+	c.config.Resources = newResources
+	return c.storeContainer()
 }

@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2016 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -26,8 +15,12 @@ import (
 	"time"
 
 	proxyClient "github.com/clearcontainers/proxy/client"
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
 	"github.com/kata-containers/runtime/virtcontainers/pkg/hyperstart"
 	ns "github.com/kata-containers/runtime/virtcontainers/pkg/nsenter"
+	"github.com/kata-containers/runtime/virtcontainers/utils"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
+
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -36,7 +29,7 @@ var defaultSockPathTemplates = []string{"%s/%s/hyper.sock", "%s/%s/tty.sock"}
 var defaultChannelTemplate = "sh.hyper.channel.%d"
 var defaultDeviceIDTemplate = "channel%d"
 var defaultIDTemplate = "charch%d"
-var defaultSharedDir = "/run/hyper/shared/pods/"
+var defaultSharedDir = "/run/hyper/shared/sandboxes/"
 var mountTag = "hyperShared"
 var maxHostnameLen = 64
 
@@ -47,25 +40,25 @@ type HyperConfig struct {
 	SockTtyName string
 }
 
-func (h *hyper) generateSockets(pod Pod, c HyperConfig) {
-	podSocketPaths := []string{
-		fmt.Sprintf(defaultSockPathTemplates[0], runStoragePath, pod.id),
-		fmt.Sprintf(defaultSockPathTemplates[1], runStoragePath, pod.id),
+func (h *hyper) generateSockets(sandbox *Sandbox, c HyperConfig) {
+	sandboxSocketPaths := []string{
+		fmt.Sprintf(defaultSockPathTemplates[0], runStoragePath, sandbox.id),
+		fmt.Sprintf(defaultSockPathTemplates[1], runStoragePath, sandbox.id),
 	}
 
 	if c.SockCtlName != "" {
-		podSocketPaths[0] = c.SockCtlName
+		sandboxSocketPaths[0] = c.SockCtlName
 	}
 
 	if c.SockTtyName != "" {
-		podSocketPaths[1] = c.SockTtyName
+		sandboxSocketPaths[1] = c.SockTtyName
 	}
 
-	for i := 0; i < len(podSocketPaths); i++ {
+	for i := 0; i < len(sandboxSocketPaths); i++ {
 		s := Socket{
 			DeviceID: fmt.Sprintf(defaultDeviceIDTemplate, i),
 			ID:       fmt.Sprintf(defaultIDTemplate, i),
-			HostPath: podSocketPaths[i],
+			HostPath: sandboxSocketPaths[i],
 			Name:     fmt.Sprintf(defaultChannelTemplate, i),
 		}
 		h.sockets = append(h.sockets, s)
@@ -81,11 +74,11 @@ type HyperAgentState struct {
 
 // hyper is the Agent interface implementation for hyperstart.
 type hyper struct {
-	pod    Pod
-	shim   shim
-	proxy  proxy
-	client *proxyClient.Client
-	state  HyperAgentState
+	sandbox *Sandbox
+	shim    shim
+	proxy   proxy
+	client  *proxyClient.Client
+	state   HyperAgentState
 
 	sockets []Socket
 }
@@ -173,14 +166,14 @@ func (h *hyper) processHyperRoute(route netlink.Route, deviceName string) *hyper
 	}
 }
 
-func (h *hyper) buildNetworkInterfacesAndRoutes(pod Pod) ([]hyperstart.NetworkIface, []hyperstart.Route, error) {
-	if pod.networkNS.NetNsPath == "" {
+func (h *hyper) buildNetworkInterfacesAndRoutes(sandbox *Sandbox) ([]hyperstart.NetworkIface, []hyperstart.Route, error) {
+	if sandbox.networkNS.NetNsPath == "" {
 		return []hyperstart.NetworkIface{}, []hyperstart.Route{}, nil
 	}
 
 	var ifaces []hyperstart.NetworkIface
 	var routes []hyperstart.Route
-	for _, endpoint := range pod.networkNS.Endpoints {
+	for _, endpoint := range sandbox.networkNS.Endpoints {
 		var ipAddresses []hyperstart.IPAddress
 		for _, addr := range endpoint.Properties().Addrs {
 			// Skip IPv6 because not supported by hyperstart.
@@ -239,39 +232,39 @@ func fsMapFromMounts(mounts []Mount) []*hyperstart.FsmapDescriptor {
 }
 
 // init is the agent initialization implementation for hyperstart.
-func (h *hyper) init(pod *Pod, config interface{}) (err error) {
+func (h *hyper) init(sandbox *Sandbox, config interface{}) (err error) {
 	switch c := config.(type) {
 	case HyperConfig:
 		// Create agent sockets from paths provided through
 		// configuration, or generate them from scratch.
-		h.generateSockets(*pod, c)
+		h.generateSockets(sandbox, c)
 
-		h.pod = *pod
+		h.sandbox = sandbox
 	default:
 		return fmt.Errorf("Invalid config type")
 	}
 
-	h.proxy, err = newProxy(pod.config.ProxyType)
+	h.proxy, err = newProxy(sandbox.config.ProxyType)
 	if err != nil {
 		return err
 	}
 
-	h.shim, err = newShim(pod.config.ShimType)
+	h.shim, err = newShim(sandbox.config.ShimType)
 	if err != nil {
 		return err
 	}
 
 	// Fetch agent runtime info.
-	if err := pod.storage.fetchAgentState(pod.id, &h.state); err != nil {
+	if err := sandbox.storage.fetchAgentState(sandbox.id, &h.state); err != nil {
 		h.Logger().Debug("Could not retrieve anything from storage")
 	}
 
 	return nil
 }
 
-func (h *hyper) createPod(pod *Pod) (err error) {
+func (h *hyper) createSandbox(sandbox *Sandbox) (err error) {
 	for _, socket := range h.sockets {
-		err := pod.hypervisor.addDevice(socket, serialPortDev)
+		err := sandbox.hypervisor.addDevice(socket, serialPortDev)
 		if err != nil {
 			return err
 		}
@@ -281,14 +274,14 @@ func (h *hyper) createPod(pod *Pod) (err error) {
 	// This volume contains all bind mounted container bundles.
 	sharedVolume := Volume{
 		MountTag: mountTag,
-		HostPath: filepath.Join(defaultSharedDir, pod.id),
+		HostPath: filepath.Join(defaultSharedDir, sandbox.id),
 	}
 
 	if err := os.MkdirAll(sharedVolume.HostPath, dirMode); err != nil {
 		return err
 	}
 
-	return pod.hypervisor.addDevice(sharedVolume, fsDev)
+	return sandbox.hypervisor.addDevice(sharedVolume, fsDev)
 }
 
 func (h *hyper) capabilities() capabilities {
@@ -301,7 +294,7 @@ func (h *hyper) capabilities() capabilities {
 }
 
 // exec is the agent command execution implementation for hyperstart.
-func (h *hyper) exec(pod *Pod, c Container, cmd Cmd) (*Process, error) {
+func (h *hyper) exec(sandbox *Sandbox, c Container, cmd Cmd) (*Process, error) {
 	token, err := h.attach()
 	if err != nil {
 		return nil, err
@@ -328,7 +321,7 @@ func (h *hyper) exec(pod *Pod, c Container, cmd Cmd) (*Process, error) {
 		},
 	}
 
-	process, err := prepareAndStartShim(pod, h.shim, c.id,
+	process, err := prepareAndStartShim(sandbox, h.shim, c.id,
 		token, h.state.URL, cmd, []ns.NSType{}, enterNSList)
 	if err != nil {
 		return nil, err
@@ -347,10 +340,10 @@ func (h *hyper) exec(pod *Pod, c Container, cmd Cmd) (*Process, error) {
 	return process, nil
 }
 
-// startPod is the agent Pod starting implementation for hyperstart.
-func (h *hyper) startPod(pod Pod) error {
+// startSandbox is the agent Sandbox starting implementation for hyperstart.
+func (h *hyper) startSandbox(sandbox *Sandbox) error {
 	// Start the proxy here
-	pid, uri, err := h.proxy.start(pod, proxyParams{})
+	pid, uri, err := h.proxy.start(sandbox, proxyParams{})
 	if err != nil {
 		return err
 	}
@@ -358,7 +351,7 @@ func (h *hyper) startPod(pod Pod) error {
 	// Fill agent state with proxy information, and store them.
 	h.state.ProxyPid = pid
 	h.state.URL = uri
-	if err := pod.storage.storeAgentState(pod.id, h.state); err != nil {
+	if err := sandbox.storage.storeAgentState(sandbox.id, h.state); err != nil {
 		return err
 	}
 
@@ -368,17 +361,17 @@ func (h *hyper) startPod(pod Pod) error {
 		return err
 	}
 
-	ifaces, routes, err := h.buildNetworkInterfacesAndRoutes(pod)
+	ifaces, routes, err := h.buildNetworkInterfacesAndRoutes(sandbox)
 	if err != nil {
 		return err
 	}
 
-	hostname := pod.config.Hostname
+	hostname := sandbox.config.Hostname
 	if len(hostname) > maxHostnameLen {
 		hostname = hostname[:maxHostnameLen]
 	}
 
-	hyperPod := hyperstart.Pod{
+	hyperSandbox := hyperstart.Sandbox{
 		Hostname:   hostname,
 		Containers: []hyperstart.Container{},
 		Interfaces: ifaces,
@@ -387,18 +380,18 @@ func (h *hyper) startPod(pod Pod) error {
 	}
 
 	proxyCmd := hyperstartProxyCmd{
-		cmd:     hyperstart.StartPod,
-		message: hyperPod,
+		cmd:     hyperstart.StartSandbox,
+		message: hyperSandbox,
 	}
 
 	_, err = h.sendCmd(proxyCmd)
 	return err
 }
 
-// stopPod is the agent Pod stopping implementation for hyperstart.
-func (h *hyper) stopPod(pod Pod) error {
+// stopSandbox is the agent Sandbox stopping implementation for hyperstart.
+func (h *hyper) stopSandbox(sandbox *Sandbox) error {
 	proxyCmd := hyperstartProxyCmd{
-		cmd:     hyperstart.DestroyPod,
+		cmd:     hyperstart.DestroySandbox,
 		message: nil,
 	}
 
@@ -410,10 +403,21 @@ func (h *hyper) stopPod(pod Pod) error {
 		return err
 	}
 
-	return h.proxy.stop(pod, h.state.ProxyPid)
+	return h.proxy.stop(sandbox, h.state.ProxyPid)
 }
 
-func (h *hyper) startOneContainer(pod Pod, c *Container) error {
+// handleBlockVolumes handles volumes that are block device files, by
+// appending the block device to the list of devices associated with the
+// container.
+func (h *hyper) handleBlockVolumes(c *Container) {
+	for _, m := range c.mounts {
+		if m.BlockDevice != nil {
+			c.devices = append(c.devices, m.BlockDevice)
+		}
+	}
+}
+
+func (h *hyper) startOneContainer(sandbox *Sandbox, c *Container) error {
 	process, err := h.buildHyperContainerProcess(c.config.Cmd)
 	if err != nil {
 		return err
@@ -426,29 +430,18 @@ func (h *hyper) startOneContainer(pod Pod, c *Container) error {
 		Process: process,
 	}
 
-	if c.config.Resources.CPUQuota != 0 && c.config.Resources.CPUPeriod != 0 {
-		container.Constraints = hyperstart.Constraints{
-			CPUQuota:  c.config.Resources.CPUQuota,
-			CPUPeriod: c.config.Resources.CPUPeriod,
-		}
-	}
-
-	if c.config.Resources.CPUShares != 0 {
-		container.Constraints.CPUShares = c.config.Resources.CPUShares
-	}
-
 	container.SystemMountsInfo.BindMountDev = c.systemMountsInfo.BindMountDev
 
 	if c.state.Fstype != "" {
 		// Pass a drive name only in case of block driver
-		if pod.config.HypervisorConfig.BlockDeviceDriver == VirtioBlock {
-			driveName, err := getVirtDriveName(c.state.BlockIndex)
+		if sandbox.config.HypervisorConfig.BlockDeviceDriver == VirtioBlock {
+			driveName, err := utils.GetVirtDriveName(c.state.BlockIndex)
 			if err != nil {
 				return err
 			}
 			container.Image = driveName
 		} else {
-			scsiAddr, err := getSCSIAddress(c.state.BlockIndex)
+			scsiAddr, err := utils.GetSCSIAddress(c.state.BlockIndex)
 			if err != nil {
 				return err
 			}
@@ -458,8 +451,8 @@ func (h *hyper) startOneContainer(pod Pod, c *Container) error {
 		container.Fstype = c.state.Fstype
 	} else {
 
-		if err := bindMountContainerRootfs(defaultSharedDir, pod.id, c.id, c.rootFs, false); err != nil {
-			bindUnmountAllRootfs(defaultSharedDir, pod)
+		if err := bindMountContainerRootfs(defaultSharedDir, sandbox.id, c.id, c.rootFs, false); err != nil {
+			bindUnmountAllRootfs(defaultSharedDir, sandbox)
 			return err
 		}
 	}
@@ -469,15 +462,17 @@ func (h *hyper) startOneContainer(pod Pod, c *Container) error {
 	// Handle container mounts
 	newMounts, err := c.mountSharedDirMounts(defaultSharedDir, "")
 	if err != nil {
-		bindUnmountAllRootfs(defaultSharedDir, pod)
+		bindUnmountAllRootfs(defaultSharedDir, sandbox)
 		return err
 	}
 
 	fsmap := fsMapFromMounts(newMounts)
 
+	h.handleBlockVolumes(c)
+
 	// Append container mounts for block devices passed with --device.
 	for _, device := range c.devices {
-		d, ok := device.(*BlockDevice)
+		d, ok := device.(*drivers.BlockDevice)
 
 		if ok {
 			fsmapDesc := &hyperstart.FsmapDescriptor{
@@ -508,7 +503,7 @@ func (h *hyper) startOneContainer(pod Pod, c *Container) error {
 }
 
 // createContainer is the agent Container creation implementation for hyperstart.
-func (h *hyper) createContainer(pod *Pod, c *Container) (*Process, error) {
+func (h *hyper) createContainer(sandbox *Sandbox, c *Container) (*Process, error) {
 	token, err := h.attach()
 	if err != nil {
 		return nil, err
@@ -518,31 +513,31 @@ func (h *hyper) createContainer(pod *Pod, c *Container) (*Process, error) {
 
 	enterNSList := []ns.Namespace{
 		{
-			Path: pod.networkNS.NetNsPath,
+			Path: sandbox.networkNS.NetNsPath,
 			Type: ns.NSTypeNet,
 		},
 	}
 
-	return prepareAndStartShim(pod, h.shim, c.id, token,
+	return prepareAndStartShim(sandbox, h.shim, c.id, token,
 		h.state.URL, c.config.Cmd, createNSList, enterNSList)
 }
 
 // startContainer is the agent Container starting implementation for hyperstart.
-func (h *hyper) startContainer(pod Pod, c *Container) error {
-	return h.startOneContainer(pod, c)
+func (h *hyper) startContainer(sandbox *Sandbox, c *Container) error {
+	return h.startOneContainer(sandbox, c)
 }
 
 // stopContainer is the agent Container stopping implementation for hyperstart.
-func (h *hyper) stopContainer(pod Pod, c Container) error {
+func (h *hyper) stopContainer(sandbox *Sandbox, c Container) error {
 	// Nothing to be done in case the container has not been started.
 	if c.state.State == StateReady {
 		return nil
 	}
 
-	return h.stopOneContainer(pod.id, c)
+	return h.stopOneContainer(sandbox.id, c)
 }
 
-func (h *hyper) stopOneContainer(podID string, c Container) error {
+func (h *hyper) stopOneContainer(sandboxID string, c Container) error {
 	removeCommand := hyperstart.RemoveCommand{
 		Container: c.id,
 	}
@@ -561,7 +556,7 @@ func (h *hyper) stopOneContainer(podID string, c Container) error {
 	}
 
 	if c.state.Fstype == "" {
-		if err := bindUnmountContainerRootfs(defaultSharedDir, podID, c.id); err != nil {
+		if err := bindUnmountContainerRootfs(defaultSharedDir, sandboxID, c.id); err != nil {
 			return err
 		}
 	}
@@ -569,8 +564,8 @@ func (h *hyper) stopOneContainer(podID string, c Container) error {
 	return nil
 }
 
-// killContainer is the agent process signal implementation for hyperstart.
-func (h *hyper) killContainer(pod Pod, c Container, signal syscall.Signal, all bool) error {
+// signalProcess is the agent process signal implementation for hyperstart.
+func (h *hyper) signalProcess(c *Container, processID string, signal syscall.Signal, all bool) error {
 	// Send the signal to the shim directly in case the container has not
 	// been started yet.
 	if c.state.State == StateReady {
@@ -599,11 +594,21 @@ func (h *hyper) killOneContainer(cID string, signal syscall.Signal, all bool) er
 	return nil
 }
 
-func (h *hyper) processListContainer(pod Pod, c Container, options ProcessListOptions) (ProcessList, error) {
-	return h.processListOneContainer(pod.id, c.id, options)
+func (h *hyper) processListContainer(sandbox *Sandbox, c Container, options ProcessListOptions) (ProcessList, error) {
+	return h.processListOneContainer(sandbox.id, c.id, options)
 }
 
-func (h *hyper) processListOneContainer(podID, cID string, options ProcessListOptions) (ProcessList, error) {
+// statsContainer is the hyperstart agent Container stats implementation. It does nothing.
+func (h *hyper) statsContainer(sandbox *Sandbox, c Container) (*ContainerStats, error) {
+	return &ContainerStats{}, nil
+}
+
+func (h *hyper) updateContainer(sandbox *Sandbox, c Container, resources specs.LinuxResources) error {
+	// hyperstart-agent does not support update
+	return nil
+}
+
+func (h *hyper) processListOneContainer(sandboxID, cID string, options ProcessListOptions) (ProcessList, error) {
 	psCmd := hyperstart.PsCommand{
 		Container: cID,
 		Format:    options.Format,
@@ -622,7 +627,7 @@ func (h *hyper) processListOneContainer(podID, cID string, options ProcessListOp
 
 	msg, ok := response.([]byte)
 	if !ok {
-		return nil, fmt.Errorf("failed to get response message from container %s pod %s", cID, podID)
+		return nil, fmt.Errorf("failed to get response message from container %s sandbox %s", cID, sandboxID)
 	}
 
 	return msg, nil
@@ -713,13 +718,13 @@ func (h *hyper) connect() error {
 	return nil
 }
 
-func (h *hyper) disconnect() {
-	if h.client == nil {
-		return
+func (h *hyper) disconnect() error {
+	if h.client != nil {
+		h.client.Close()
+		h.client = nil
 	}
 
-	h.client.Close()
-	h.client = nil
+	return nil
 }
 
 func (h *hyper) register() error {
@@ -728,12 +733,17 @@ func (h *hyper) register() error {
 	}
 	defer h.disconnect()
 
+	console, err := h.sandbox.hypervisor.getSandboxConsole(h.sandbox.id)
+	if err != nil {
+		return err
+	}
+
 	registerVMOptions := &proxyClient.RegisterVMOptions{
-		Console:      h.pod.hypervisor.getPodConsole(h.pod.id),
+		Console:      console,
 		NumIOStreams: 0,
 	}
 
-	_, err := h.client.RegisterVM(h.pod.id, h.sockets[0].HostPath,
+	_, err = h.client.RegisterVM(h.sandbox.id, h.sockets[0].HostPath,
 		h.sockets[1].HostPath, registerVMOptions)
 	return err
 }
@@ -744,7 +754,7 @@ func (h *hyper) unregister() error {
 	}
 	defer h.disconnect()
 
-	h.client.UnregisterVM(h.pod.id)
+	h.client.UnregisterVM(h.sandbox.id)
 
 	return nil
 }
@@ -760,7 +770,7 @@ func (h *hyper) attach() (string, error) {
 		NumIOStreams: numTokens,
 	}
 
-	attachVMReturn, err := h.client.AttachVM(h.pod.id, attachVMOptions)
+	attachVMReturn, err := h.client.AttachVM(h.sandbox.id, attachVMOptions)
 	if err != nil {
 		return "", err
 	}
@@ -783,7 +793,7 @@ func (h *hyper) sendCmd(proxyCmd hyperstartProxyCmd) (interface{}, error) {
 		NumIOStreams: 0,
 	}
 
-	if _, err := h.client.AttachVM(h.pod.id, attachVMOptions); err != nil {
+	if _, err := h.client.AttachVM(h.sandbox.id, attachVMOptions); err != nil {
 		return nil, err
 	}
 
@@ -795,7 +805,52 @@ func (h *hyper) sendCmd(proxyCmd hyperstartProxyCmd) (interface{}, error) {
 	return h.client.HyperWithTokens(proxyCmd.cmd, tokens, proxyCmd.message)
 }
 
-func (h *hyper) onlineCPUMem() error {
-	// cc-agent uses udev to online CPUs automatically
+func (h *hyper) onlineCPUMem(cpus uint32) error {
+	// hyperstart-agent uses udev to online CPUs automatically
+	return nil
+}
+
+func (h *hyper) check() error {
+	// hyperstart-agent does not support check
+	return nil
+}
+
+func (h *hyper) waitProcess(c *Container, processID string) (int32, error) {
+	// hyperstart-agent does not support wait process
+	return 0, nil
+}
+
+func (h *hyper) winsizeProcess(c *Container, processID string, height, width uint32) error {
+	// hyperstart-agent does not support winsize process
+	return nil
+}
+
+func (h *hyper) writeProcessStdin(c *Container, ProcessID string, data []byte) (int, error) {
+	// hyperstart-agent does not support stdin write request
+	return 0, nil
+}
+
+func (h *hyper) closeProcessStdin(c *Container, ProcessID string) error {
+	// hyperstart-agent does not support stdin close request
+	return nil
+}
+
+func (h *hyper) readProcessStdout(c *Container, processID string, data []byte) (int, error) {
+	// hyperstart-agent does not support stdout read request
+	return 0, nil
+}
+
+func (h *hyper) readProcessStderr(c *Container, processID string, data []byte) (int, error) {
+	// hyperstart-agent does not support stderr read request
+	return 0, nil
+}
+
+func (h *hyper) pauseContainer(sandbox *Sandbox, c Container) error {
+	// hyperstart-agent does not support pause container
+	return nil
+}
+
+func (h *hyper) resumeContainer(sandbox *Sandbox, c Container) error {
+	// hyperstart-agent does not support resume container
 	return nil
 }

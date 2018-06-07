@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -25,9 +14,51 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/kata-containers/runtime/virtcontainers/device/drivers"
 )
 
 var rootfsDir = "rootfs"
+
+var systemMountPrefixes = []string{"/proc", "/sys"}
+
+func isSystemMount(m string) bool {
+	for _, p := range systemMountPrefixes {
+		if m == p || strings.HasPrefix(m, p+"/") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isHostDevice(m string) bool {
+	if m == "/dev" {
+		return true
+	}
+
+	if strings.HasPrefix(m, "/dev/") {
+		// Check if regular file
+		s, err := os.Stat(m)
+
+		// This should not happen. In case file does not exist let the
+		// error be handled by the agent, simply return false here.
+		if err != nil {
+			return false
+		}
+
+		if s.Mode().IsRegular() {
+			return false
+		}
+
+		// This is not a regular file in /dev. It is either a
+		// device file, directory or any other special file which is
+		// specific to the host system.
+		return true
+	}
+
+	return false
+}
 
 func major(dev uint64) int {
 	return int((dev >> 8) & 0xfff)
@@ -189,39 +220,6 @@ func isDeviceMapper(major, minor int) (bool, error) {
 	return false, err
 }
 
-// getVirtBlockDriveName returns the disk name format for virtio-blk
-// Reference: https://github.com/torvalds/linux/blob/master/drivers/block/virtio_blk.c @c0aa3e0916d7e531e69b02e426f7162dfb1c6c0
-func getVirtDriveName(index int) (string, error) {
-	if index < 0 {
-		return "", fmt.Errorf("Index cannot be negative for drive")
-	}
-
-	// Prefix used for virtio-block devices
-	const prefix = "vd"
-
-	//Refer to DISK_NAME_LEN: https://github.com/torvalds/linux/blob/08c521a2011ff492490aa9ed6cc574be4235ce2b/include/linux/genhd.h#L61
-	diskNameLen := 32
-	base := 26
-
-	suffLen := diskNameLen - len(prefix)
-	diskLetters := make([]byte, suffLen)
-
-	var i int
-
-	for i = 0; i < suffLen && index >= 0; i++ {
-		letter := byte('a' + (index % base))
-		diskLetters[i] = letter
-		index = index/base - 1
-	}
-
-	if index >= 0 {
-		return "", fmt.Errorf("Index not supported")
-	}
-
-	diskName := prefix + reverseString(string(diskLetters[:i]))
-	return diskName, nil
-}
-
 const mountPerm = os.FileMode(0755)
 
 // bindMount bind mounts a source in to a destination. This will
@@ -259,8 +257,8 @@ func bindMount(source, destination string, readonly bool) error {
 
 // bindMountContainerRootfs bind mounts a container rootfs into a 9pfs shared
 // directory between the guest and the host.
-func bindMountContainerRootfs(sharedDir, podID, cID, cRootFs string, readonly bool) error {
-	rootfsDest := filepath.Join(sharedDir, podID, cID, rootfsDir)
+func bindMountContainerRootfs(sharedDir, sandboxID, cID, cRootFs string, readonly bool) error {
+	rootfsDest := filepath.Join(sharedDir, sandboxID, cID, rootfsDir)
 
 	return bindMount(cRootFs, rootfsDest, readonly)
 }
@@ -281,49 +279,27 @@ type Mount struct {
 
 	// ReadOnly specifies if the mount should be read only or not
 	ReadOnly bool
+
+	// BlockDevice represents block device that is attached to the
+	// VM in case this mount is a block device file or a directory
+	// backed by a block device.
+	BlockDevice *drivers.BlockDevice
 }
 
-func bindUnmountContainerRootfs(sharedDir, podID, cID string) error {
-	rootfsDest := filepath.Join(sharedDir, podID, cID, rootfsDir)
+func bindUnmountContainerRootfs(sharedDir, sandboxID, cID string) error {
+	rootfsDest := filepath.Join(sharedDir, sandboxID, cID, rootfsDir)
 	syscall.Unmount(rootfsDest, 0)
 
 	return nil
 }
 
-func bindUnmountAllRootfs(sharedDir string, pod Pod) {
-	for _, c := range pod.containers {
+func bindUnmountAllRootfs(sharedDir string, sandbox *Sandbox) {
+	for _, c := range sandbox.containers {
 		c.unmountHostMounts()
 		if c.state.Fstype == "" {
 			// Need to check for error returned by this call.
 			// See: https://github.com/containers/virtcontainers/issues/295
-			bindUnmountContainerRootfs(sharedDir, pod.id, c.id)
+			bindUnmountContainerRootfs(sharedDir, sandbox.id, c.id)
 		}
 	}
-}
-
-const maxSCSIDevices = 65535
-
-// getSCSIIdLun gets the SCSI id and lun, based on the index of the drive being inserted.
-// qemu code suggests that scsi-id can take values from 0 to 255 inclusive, while lun can
-// take values from 0 to 16383 inclusive. But lun values over 255 do not seem to follow
-// consistent SCSI addressing. Hence we limit to 255.
-func getSCSIIdLun(index int) (int, int, error) {
-	if index < 0 {
-		return -1, -1, fmt.Errorf("Index cannot be negative")
-	}
-
-	if index > maxSCSIDevices {
-		return -1, -1, fmt.Errorf("Index cannot be greater than %d, maximum of %d devices are supported", maxSCSIDevices, maxSCSIDevices)
-	}
-
-	return index / 256, index % 256, nil
-}
-
-func getSCSIAddress(index int) (string, error) {
-	scsiID, lun, err := getSCSIIdLun(index)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%d:%d", scsiID, lun), nil
 }

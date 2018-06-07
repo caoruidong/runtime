@@ -1,23 +1,11 @@
-//
 // Copyright (c) 2018 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
 
 import (
-	"fmt"
 	"os"
 
 	govmmQemu "github.com/intel/govmm/qemu"
@@ -81,8 +69,8 @@ var supportedQemuMachines = []govmmQemu.Machine{
 	},
 }
 
-// returns the maximum number of vCPUs supported
-func maxQemuVCPUs() uint32 {
+// MaxQemuVCPUs returns the maximum number of vCPUs supported
+func MaxQemuVCPUs() uint32 {
 	return uint32(240)
 }
 
@@ -103,12 +91,7 @@ func newQemuArch(config HypervisorConfig) qemuArch {
 		},
 	}
 
-	if config.ImagePath != "" {
-		q.kernelParams = append(q.kernelParams, kernelRootParams...)
-		q.kernelParamsNonDebug = append(q.kernelParamsNonDebug, kernelParamsSystemdNonDebug...)
-		q.kernelParamsDebug = append(q.kernelParamsDebug, kernelParamsSystemdDebug...)
-	}
-
+	q.handleImagePath(config)
 	return q
 }
 
@@ -124,29 +107,7 @@ func (q *qemuAmd64) capabilities() capabilities {
 }
 
 func (q *qemuAmd64) bridges(number uint32) []Bridge {
-	var bridges []Bridge
-	var bt bridgeType
-
-	switch q.machineType {
-	case QemuQ35:
-		// currently only pci bridges are supported
-		// qemu-2.10 will introduce pcie bridges
-		fallthrough
-	case QemuPC:
-		bt = pciBridge
-	default:
-		return nil
-	}
-
-	for i := uint32(0); i < number; i++ {
-		bridges = append(bridges, Bridge{
-			Type:    bt,
-			ID:      fmt.Sprintf("%s-bridge-%d", bt, i),
-			Address: make(map[uint32]string),
-		})
-	}
-
-	return bridges
+	return genericBridges(number, q.machineType)
 }
 
 func (q *qemuAmd64) cpuModel() string {
@@ -158,22 +119,7 @@ func (q *qemuAmd64) cpuModel() string {
 }
 
 func (q *qemuAmd64) memoryTopology(memoryMb, hostMemoryMb uint64) govmmQemu.Memory {
-	// NVDIMM device needs memory space 1024MB
-	// See https://github.com/clearcontainers/runtime/issues/380
-	memoryOffset := 1024
-
-	// add 1G memory space for nvdimm device (vm guest image)
-	memMax := fmt.Sprintf("%dM", hostMemoryMb+uint64(memoryOffset))
-
-	mem := fmt.Sprintf("%dM", memoryMb)
-
-	memory := govmmQemu.Memory{
-		Size:   mem,
-		Slots:  defaultMemSlots,
-		MaxMem: memMax,
-	}
-
-	return memory
+	return genericMemoryTopology(memoryMb, hostMemoryMb)
 }
 
 func (q *qemuAmd64) appendImage(devices []govmmQemu.Device, path string) ([]govmmQemu.Device, error) {
@@ -204,28 +150,5 @@ func (q *qemuAmd64) appendImage(devices []govmmQemu.Device, path string) ([]govm
 
 // appendBridges appends to devices the given bridges
 func (q *qemuAmd64) appendBridges(devices []govmmQemu.Device, bridges []Bridge) []govmmQemu.Device {
-	bus := defaultPCBridgeBus
-	if q.machineType == QemuQ35 {
-		bus = defaultBridgeBus
-	}
-
-	for idx, b := range bridges {
-		t := govmmQemu.PCIBridge
-		if b.Type == pcieBridge {
-			t = govmmQemu.PCIEBridge
-		}
-
-		devices = append(devices,
-			govmmQemu.BridgeDevice{
-				Type: t,
-				Bus:  bus,
-				ID:   b.ID,
-				// Each bridge is required to be assigned a unique chassis id > 0
-				Chassis: (idx + 1),
-				SHPC:    true,
-			},
-		)
-	}
-
-	return devices
+	return genericAppendBridges(devices, bridges, q.machineType)
 }

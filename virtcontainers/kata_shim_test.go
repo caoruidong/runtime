@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -40,65 +29,65 @@ func getMockKataShimBinPath() string {
 	return DefaultMockKataShimBinPath
 }
 
-func testKataShimStart(t *testing.T, pod Pod, params ShimParams, expectFail bool) {
+func testKataShimStart(t *testing.T, sandbox *Sandbox, params ShimParams, expectFail bool) {
 	s := &kataShim{}
 
-	pid, err := s.start(pod, params)
+	pid, err := s.start(sandbox, params)
 	if expectFail {
 		if err == nil || pid != -1 {
-			t.Fatalf("This test should fail (pod %+v, params %+v, expectFail %t)",
-				pod, params, expectFail)
+			t.Fatalf("This test should fail (sandbox %+v, params %+v, expectFail %t)",
+				sandbox, params, expectFail)
 		}
 	} else {
 		if err != nil {
-			t.Fatalf("This test should pass (pod %+v, params %+v, expectFail %t): %s",
-				pod, params, expectFail, err)
+			t.Fatalf("This test should pass (sandbox %+v, params %+v, expectFail %t): %s",
+				sandbox, params, expectFail, err)
 		}
 
 		if pid == -1 {
-			t.Fatalf("This test should pass (pod %+v, params %+v, expectFail %t)",
-				pod, params, expectFail)
+			t.Fatalf("This test should pass (sandbox %+v, params %+v, expectFail %t)",
+				sandbox, params, expectFail)
 		}
 	}
 }
 
-func TestKataShimStartNilPodConfigFailure(t *testing.T) {
-	testKataShimStart(t, Pod{}, ShimParams{}, true)
+func TestKataShimStartNilSandboxConfigFailure(t *testing.T) {
+	testKataShimStart(t, &Sandbox{}, ShimParams{}, true)
 }
 
 func TestKataShimStartNilShimConfigFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{},
+	sandbox := &Sandbox{
+		config: &SandboxConfig{},
 	}
 
-	testKataShimStart(t, pod, ShimParams{}, true)
+	testKataShimStart(t, sandbox, ShimParams{}, true)
 }
 
 func TestKataShimStartShimPathEmptyFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType:   KataShimType,
 			ShimConfig: ShimConfig{},
 		},
 	}
 
-	testKataShimStart(t, pod, ShimParams{}, true)
+	testKataShimStart(t, sandbox, ShimParams{}, true)
 }
 
 func TestKataShimStartShimTypeInvalid(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType:   "foo",
 			ShimConfig: ShimConfig{},
 		},
 	}
 
-	testKataShimStart(t, pod, ShimParams{}, true)
+	testKataShimStart(t, sandbox, ShimParams{}, true)
 }
 
 func TestKataShimStartParamsTokenEmptyFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -106,12 +95,12 @@ func TestKataShimStartParamsTokenEmptyFailure(t *testing.T) {
 		},
 	}
 
-	testKataShimStart(t, pod, ShimParams{}, true)
+	testKataShimStart(t, sandbox, ShimParams{}, true)
 }
 
 func TestKataShimStartParamsURLEmptyFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -123,12 +112,12 @@ func TestKataShimStartParamsURLEmptyFailure(t *testing.T) {
 		Token: "testToken",
 	}
 
-	testKataShimStart(t, pod, params, true)
+	testKataShimStart(t, sandbox, params, true)
 }
 
 func TestKataShimStartParamsContainerEmptyFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -141,7 +130,7 @@ func TestKataShimStartParamsContainerEmptyFailure(t *testing.T) {
 		URL:   "unix://is/awesome",
 	}
 
-	testKataShimStart(t, pod, params, true)
+	testKataShimStart(t, sandbox, params, true)
 }
 
 func TestKataShimStartParamsInvalidCommand(t *testing.T) {
@@ -153,8 +142,8 @@ func TestKataShimStartParamsInvalidCommand(t *testing.T) {
 
 	cmd := filepath.Join(dir, "does-not-exist")
 
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: cmd,
@@ -167,20 +156,20 @@ func TestKataShimStartParamsInvalidCommand(t *testing.T) {
 		URL:   "http://foo",
 	}
 
-	testKataShimStart(t, pod, params, true)
+	testKataShimStart(t, sandbox, params, true)
 }
 
-func startKataShimStartWithoutConsoleSuccessful(t *testing.T, detach bool) (*os.File, *os.File, *os.File, Pod, ShimParams, error) {
+func startKataShimStartWithoutConsoleSuccessful(t *testing.T, detach bool) (*os.File, *os.File, *os.File, *Sandbox, ShimParams, error) {
 	saveStdout := os.Stdout
 	rStdout, wStdout, err := os.Pipe()
 	if err != nil {
-		return nil, nil, nil, Pod{}, ShimParams{}, err
+		return nil, nil, nil, &Sandbox{}, ShimParams{}, err
 	}
 
 	os.Stdout = wStdout
 
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -195,11 +184,11 @@ func startKataShimStartWithoutConsoleSuccessful(t *testing.T, detach bool) (*os.
 		Detach:    detach,
 	}
 
-	return rStdout, wStdout, saveStdout, pod, params, nil
+	return rStdout, wStdout, saveStdout, sandbox, params, nil
 }
 
 func TestKataShimStartSuccessful(t *testing.T) {
-	rStdout, wStdout, saveStdout, pod, params, err := startKataShimStartWithoutConsoleSuccessful(t, false)
+	rStdout, wStdout, saveStdout, sandbox, params, err := startKataShimStartWithoutConsoleSuccessful(t, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +199,7 @@ func TestKataShimStartSuccessful(t *testing.T) {
 		wStdout.Close()
 	}()
 
-	testKataShimStart(t, pod, params, false)
+	testKataShimStart(t, sandbox, params, false)
 
 	bufStdout := make([]byte, 1024)
 	if _, err := rStdout.Read(bufStdout); err != nil {
@@ -223,7 +212,7 @@ func TestKataShimStartSuccessful(t *testing.T) {
 }
 
 func TestKataShimStartDetachSuccessful(t *testing.T) {
-	rStdout, wStdout, saveStdout, pod, params, err := startKataShimStartWithoutConsoleSuccessful(t, true)
+	rStdout, wStdout, saveStdout, sandbox, params, err := startKataShimStartWithoutConsoleSuccessful(t, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,10 +223,11 @@ func TestKataShimStartDetachSuccessful(t *testing.T) {
 		rStdout.Close()
 	}()
 
-	testKataShimStart(t, pod, params, false)
+	testKataShimStart(t, sandbox, params, false)
 
-	readCh := make(chan error)
+	readCh := make(chan error, 1)
 	go func() {
+		defer close(readCh)
 		bufStdout := make([]byte, 1024)
 		n, err := rStdout.Read(bufStdout)
 		if err != nil && err != io.EOF {
@@ -264,8 +254,8 @@ func TestKataShimStartDetachSuccessful(t *testing.T) {
 }
 
 func TestKataShimStartWithConsoleNonExistingFailure(t *testing.T) {
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -279,7 +269,7 @@ func TestKataShimStartWithConsoleNonExistingFailure(t *testing.T) {
 		Console: testWrongConsolePath,
 	}
 
-	testKataShimStart(t, pod, params, true)
+	testKataShimStart(t, sandbox, params, true)
 }
 
 func TestKataShimStartWithConsoleSuccessful(t *testing.T) {
@@ -292,8 +282,8 @@ func TestKataShimStartWithConsoleSuccessful(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pod := Pod{
-		config: &PodConfig{
+	sandbox := &Sandbox{
+		config: &SandboxConfig{
 			ShimType: KataShimType,
 			ShimConfig: ShimConfig{
 				Path: getMockKataShimBinPath(),
@@ -308,6 +298,6 @@ func TestKataShimStartWithConsoleSuccessful(t *testing.T) {
 		Console:   console,
 	}
 
-	testKataShimStart(t, pod, params, false)
+	testKataShimStart(t, sandbox, params, false)
 	master.Close()
 }

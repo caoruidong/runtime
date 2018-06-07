@@ -1,17 +1,6 @@
-//
 // Copyright (c) 2017 Intel Corporation
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 //
 
 package virtcontainers
@@ -50,6 +39,10 @@ func TestSetNoopProxyType(t *testing.T) {
 
 func TestSetNoProxyType(t *testing.T) {
 	testSetProxyType(t, "noProxy", NoProxyType)
+}
+
+func TestSetKataBuiltInProxyType(t *testing.T) {
+	testSetProxyType(t, "kataBuiltInProxy", KataBuiltInProxyType)
 }
 
 func TestSetUnknownProxyType(t *testing.T) {
@@ -97,6 +90,11 @@ func TestStringFromNoopProxyType(t *testing.T) {
 	testStringFromProxyType(t, proxyType, "noopProxy")
 }
 
+func TestStringFromKataBuiltInProxyType(t *testing.T) {
+	proxyType := KataBuiltInProxyType
+	testStringFromProxyType(t, proxyType, "kataBuiltInProxy")
+}
+
 func TestStringFromUnknownProxyType(t *testing.T) {
 	var proxyType ProxyType
 	testStringFromProxyType(t, proxyType, "")
@@ -137,6 +135,12 @@ func TestNewProxyFromNoopProxyType(t *testing.T) {
 	testNewProxyFromProxyType(t, proxyType, expectedProxy)
 }
 
+func TestNewProxyFromKataBuiltInProxyType(t *testing.T) {
+	proxyType := KataBuiltInProxyType
+	expectedProxy := &kataBuiltInProxy{}
+	testNewProxyFromProxyType(t, proxyType, expectedProxy)
+}
+
 func TestNewProxyFromUnknownProxyType(t *testing.T) {
 	var proxyType ProxyType
 
@@ -146,8 +150,8 @@ func TestNewProxyFromUnknownProxyType(t *testing.T) {
 	}
 }
 
-func testNewProxyConfigFromPodConfig(t *testing.T, podConfig PodConfig, expected ProxyConfig) {
-	result, err := newProxyConfig(&podConfig)
+func testNewProxyConfigFromSandboxConfig(t *testing.T, sandboxConfig SandboxConfig, expected ProxyConfig) {
+	result, err := newProxyConfig(&sandboxConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,57 +163,57 @@ func testNewProxyConfigFromPodConfig(t *testing.T, podConfig PodConfig, expected
 
 var testProxyPath = "proxy-path"
 
-func TestNewProxyConfigFromCCProxyPodConfig(t *testing.T) {
+func TestNewProxyConfigFromCCProxySandboxConfig(t *testing.T) {
 	proxyConfig := ProxyConfig{
 		Path: testProxyPath,
 	}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		ProxyType:   CCProxyType,
 		ProxyConfig: proxyConfig,
 	}
 
-	testNewProxyConfigFromPodConfig(t, podConfig, proxyConfig)
+	testNewProxyConfigFromSandboxConfig(t, sandboxConfig, proxyConfig)
 }
 
-func TestNewProxyConfigFromKataProxyPodConfig(t *testing.T) {
+func TestNewProxyConfigFromKataProxySandboxConfig(t *testing.T) {
 	proxyConfig := ProxyConfig{
 		Path: testProxyPath,
 	}
 
-	podConfig := PodConfig{
+	sandboxConfig := SandboxConfig{
 		ProxyType:   KataProxyType,
 		ProxyConfig: proxyConfig,
 	}
 
-	testNewProxyConfigFromPodConfig(t, podConfig, proxyConfig)
+	testNewProxyConfigFromSandboxConfig(t, sandboxConfig, proxyConfig)
 }
 
-func TestNewProxyConfigNilPodConfigFailure(t *testing.T) {
+func TestNewProxyConfigNilSandboxConfigFailure(t *testing.T) {
 	if _, err := newProxyConfig(nil); err == nil {
-		t.Fatal("Should fail because PodConfig provided is nil")
+		t.Fatal("Should fail because SandboxConfig provided is nil")
 	}
 }
 
 func TestNewProxyConfigNoPathFailure(t *testing.T) {
-	podConfig := &PodConfig{
+	sandboxConfig := &SandboxConfig{
 		ProxyType:   CCProxyType,
 		ProxyConfig: ProxyConfig{},
 	}
 
-	if _, err := newProxyConfig(podConfig); err == nil {
+	if _, err := newProxyConfig(sandboxConfig); err == nil {
 		t.Fatal("Should fail because ProxyConfig has no Path")
 	}
 }
 
-const podID = "123456789"
+const sandboxID = "123456789"
 
-func testDefaultProxyURL(expectedURL string, socketType string, podID string) error {
-	pod := &Pod{
-		id: podID,
+func testDefaultProxyURL(expectedURL string, socketType string, sandboxID string) error {
+	sandbox := &Sandbox{
+		id: sandboxID,
 	}
 
-	url, err := defaultProxyURL(*pod, socketType)
+	url, err := defaultProxyURL(sandbox, socketType)
 	if err != nil {
 		return err
 	}
@@ -222,25 +226,25 @@ func testDefaultProxyURL(expectedURL string, socketType string, podID string) er
 }
 
 func TestDefaultProxyURLUnix(t *testing.T) {
-	path := filepath.Join(runStoragePath, podID, "proxy.sock")
+	path := filepath.Join(runStoragePath, sandboxID, "proxy.sock")
 	socketPath := fmt.Sprintf("unix://%s", path)
 
-	if err := testDefaultProxyURL(socketPath, SocketTypeUNIX, podID); err != nil {
+	if err := testDefaultProxyURL(socketPath, SocketTypeUNIX, sandboxID); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestDefaultProxyURLVSock(t *testing.T) {
-	if err := testDefaultProxyURL("", SocketTypeVSOCK, podID); err != nil {
+	if err := testDefaultProxyURL("", SocketTypeVSOCK, sandboxID); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestDefaultProxyURLUnknown(t *testing.T) {
-	path := filepath.Join(runStoragePath, podID, "proxy.sock")
+	path := filepath.Join(runStoragePath, sandboxID, "proxy.sock")
 	socketPath := fmt.Sprintf("unix://%s", path)
 
-	if err := testDefaultProxyURL(socketPath, "foobar", podID); err == nil {
+	if err := testDefaultProxyURL(socketPath, "foobar", sandboxID); err == nil {
 		t.Fatal()
 	}
 }
